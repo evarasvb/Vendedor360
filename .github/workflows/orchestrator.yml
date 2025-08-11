@@ -35,7 +35,7 @@ jobs:
       - name: Senegocia
         env:
           SENEGOCIA_USER: ${{ secrets.SENEGOCIA_USER }}
-          SENEGOCIA_PASS: ${{ secrets/SENEGOCIA_PASS }}
+          SENEGOCIA_PASS: ${{ secrets.SENEGOCIA_PASS }}
         run: |
           python agents/senegocia/run.py --cola queues/postulaciones.csv --status STATUS.md || true
 
