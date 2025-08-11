@@ -1,0 +1,7 @@
+# credenciales locales (no subir)
+service_account_credentials.json
+token.json
+
+# artefactos
+artifacts/
+logs/
