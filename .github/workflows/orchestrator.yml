@@ -2,11 +2,8 @@ name: Vendedor360 Orchestrator (hourly)
 
 on:
 
-         schedule:
-    - cron: "7 * * * *"  # cada hora, minuto 7
+w  workflow_dispatch:
 
-
-  w  workflow_dispatch: {}
 
 
 
