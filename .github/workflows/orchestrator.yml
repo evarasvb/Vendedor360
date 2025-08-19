@@ -1,9 +1,7 @@
 name: Vendedor360 Orchestrator (hourly)
 
 on:
-
 w  workflow_dispatch:
-
 
 
 
