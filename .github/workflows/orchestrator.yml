@@ -1,7 +1,7 @@
 name: Vendedor360 Orchestrator (hourly)
 
 on:
-  schedule:
+
     - cron: "7 * * * *"   # cada hora, minuto 7
   workflow_dispatch: {}
 
@@ -11,6 +11,9 @@ permissions:
 jobs:
   vendedor360:
     runs-on: ubuntu-latest
+        env:
+      PYTHONPATH: ${{ github.workspace }}
+        
     timeout-minutes: 55
     steps:
       - uses: actions/checkout@v4
