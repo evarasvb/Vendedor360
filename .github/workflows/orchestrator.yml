@@ -105,3 +105,15 @@ jobs:
             artifacts/**
             logs/**
             STATUS.md
+            reports/**
+      - name: Send report email
+        if: always()
+        env:
+          SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          SMTP_FROM: ${{ secrets.SMTP_FROM }}
+          REPORT_TO: evaras@firmavb.cl
+        run: |
+          python .github/scripts/send_report.py || true
