@@ -1,0 +1,20 @@
+{
+  "ubicacion_pickup": "Estación Central, Santiago",
+  "landing_url": "https://maps.app.goo.gl/XXXX",
+  "segments": [
+    {"nombre": "Desechables - Casinos", "intereses": ["Servicios de alimentación","Cocinas industriales"], "categorias": ["desechables"], "objetivo":"TRAFFIC"},
+    {"nombre": "Desechables - Fast Food", "intereses": ["Comida rápida"], "categorias": ["desechables"], "objetivo":"MESSAGES"},
+    {"nombre": "Desechables - Salud", "intereses": ["Hospital","Clínica"], "categorias": ["desechables"], "objetivo":"TRAFFIC"},
+    {"nombre": "Oficina - Colegios/Mamás", "intereses": ["Compras escolares","Padres recientes"], "categorias": ["oficina"], "objetivo":"SALES"},
+    {"nombre": "Oficina - Empresas", "intereses": ["Oficina","PYME"], "categorias": ["oficina"], "objetivo":"MESSAGES"},
+    {"nombre": "Ergonomía - Home Office", "intereses": ["Trabajo remoto","Sillas ergonómicas"], "categorias": ["ergonomia"], "objetivo":"TRAFFIC"},
+    {"nombre": "Trituradoras - Contabilidad", "intereses": ["Contabilidad","Auditoría"], "categorias": ["trituradoras"], "objetivo":"TRAFFIC"}
+  ],
+  "creatives": {
+    "desechables": {"headline": "¡Liquidadora! Insumos desechables a precio mayorista", "cta": "Cómo llegar"},
+    "oficina": {"headline": "Útiles y papelería para colegio y oficina", "cta": "Enviar mensaje"},
+    "ergonomia": {"headline": "Ergonomía real para trabajar sin dolor", "cta": "Más información"},
+    "trituradoras": {"headline": "Protege datos: trituradoras en oferta", "cta": "Más información"}
+  },
+  "utm": {"source": "meta", "medium": "ads", "campaign": "liquidadora", "content": "{segmento}-{categoria}"}
+}

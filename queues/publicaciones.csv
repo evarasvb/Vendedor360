@@ -1,4 +1,8 @@
-titulo,sku,precio,descripcion,img_url
-"Silla ergonómica respaldo malla",ERG-100,129900,"Soporte lumbar, brazos regulables, base metal",https://via.placeholder.com/800x800.png?text=Silla+Ergo
-"Cloro 5L",CL5L,3690,"Cloro concentrado para desinfección",https://via.placeholder.com/800x800.png?text=Cloro+5L
-"Guantes Nitrilo M",GNM,490,"Caja 100 unidades",https://via.placeholder.com/800x800.png?text=Guantes+Nitrilo+M
+titulo,sku,precio,descripcion,img_url,imagen,categoria,stock
+"Silla ergonómica respaldo malla",ERG-100,69990,"Soporte lumbar, base metal",,assets/ergonomia/silla1.jpg,ergonomia,15
+"Cloro 5L",CL5L,3690,"Cloro concentrado para desinfección",https://via.placeholder.com/800x800.png?text=Cloro+5L,,,
+"Guantes Nitrilo M",GNM,490,"Caja 100 unidades",https://via.placeholder.com/800x800.png?text=Guantes+Nitrilo+M,,,
+"Trituradora 12h corte cruz",,59990,"Uso oficina/contabilidad",,assets/trituradoras/tx12.jpg,trituradoras,8
+"Vasos PET 9oz pack x50",,2990,"Para colaciones/cafetería",,assets/desechables/vaso9.jpg,desechables,52000
+"Contenedor aluminio 21x12x3 pack x100",,18990,"Ideal casinos/fast-food",,assets/desechables/cont21x12.jpg,desechables,21600
+"Papel A4 75g caja x5",,14990,"Colegio/oficina",,assets/oficina/a4-75.jpg,oficina,40

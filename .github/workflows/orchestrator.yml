@@ -2,6 +2,8 @@ name: Vendedor360 Orchestrator (hourly)
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "0 * * * *"
 
 permissions:
   contents: read
@@ -12,6 +14,9 @@ jobs:
     env:
       PYTHONPATH: ${{ github.workspace }}
     timeout-minutes: 55
+    concurrency:
+      group: vendedor360-orchestrator
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -22,41 +27,81 @@ jobs:
           python -m pip install -U pip
           pip install playwright pandas requests
           python -m playwright install --with-deps chromium
+      - name: Check queues present and non-empty
+        run: |
+          set -e
+          for f in queues/postulaciones.csv queues/publicaciones.csv; do
+            if [ ! -s "$f" ]; then
+              echo "Falta o está vacío: $f"; exit 1
+            fi
+          done
+      - name: Check required secrets
+        env:
+          WHEREX_USER: ${{ secrets.WHEREX_USER }}
+          WHEREX_PASS: ${{ secrets.WHEREX_PASS }}
+          SENEGOCIA_USER: ${{ secrets.SENEGOCIA_USER }}
+          SENEGOCIA_PASS: ${{ secrets.SENEGOCIA_PASS }}
+          MP_TICKET: ${{ secrets.MP_TICKET }}
+          MP_SESSION_COOKIE: ${{ secrets.MP_SESSION_COOKIE }}
+          META_PAGE_ACCESS_TOKEN: ${{ secrets.META_PAGE_ACCESS_TOKEN }}
+          META_PAGE_ID: ${{ secrets.META_PAGE_ID }}
+          LINKEDIN_ACCESS_TOKEN: ${{ secrets.LINKEDIN_ACCESS_TOKEN }}
+          LICI_USER: ${{ secrets.LICI_USER }}
+          LICI_PASS: ${{ secrets.LICI_PASS }} }
+          CM_USER: ${{ secrets.CM_USER }}
+          CM_PASS: ${{ secrets.CM_PASS }}
+          META_AD_ACCOUNT_ID: ${{ secrets.META_AD_ACCOUNT_ID }}
+          META_PIXEL_ID: ${{ secrets.META_PIXEL_ID }}
+        run: python .github/scripts/check_secrets.py
       - name: Wherex
         env:
           WHEREX_USER: ${{ secrets.WHEREX_USER }}
           WHEREX_PASS: ${{ secrets.WHEREX_PASS }}
         run: |
-          python -m agents.wherex.run --cola queues/postulaciones.csv --status STATUS.md || true
+          python -m agents.wherex.run --cola queues/postulaciones.csv --status STATUS.md
       - name: Senegocia
         env:
           SENEGOCIA_USER: ${{ secrets.SENEGOCIA_USER }}
           SENEGOCIA_PASS: ${{ secrets.SENEGOCIA_PASS }}
         run: |
-          python -m agents.senegocia.run --cola queues/postulaciones.csv --status STATUS.md || true
+          python -m agents.senegocia.run --cola queues/postulaciones.csv --status STATUS.md
       - name: Mercado Público
         env:
           MP_SESSION_COOKIE: ${{ secrets.MP_SESSION_COOKIE }}
           MP_TICKET: ${{ secrets.MP_TICKET }}
         run: |
-          python -m agents.mp.run --cola queues/postulaciones.csv --status STATUS.md || true
+          python -m agents.mp.run --cola queues/postulaciones.csv --status STATUS.md
+      - name: Lici
+        env:
+          LICI_USER: ${{ secrets.LICI_USER }}
+          LICI_PASS: ${{ secrets.LICI_PASS }}
+        run: python -m agents.lici.run --cola queues/postulaciones.csv --status STATUS.md
       - name: Meta / Marketplace
         env:
           META_PAGE_ACCESS_TOKEN: ${{ secrets.META_PAGE_ACCESS_TOKEN }}
           META_PAGE_ID: ${{ secrets.META_PAGE_ID }}
         run: |
-          python -m agents.meta.run --catalogo queues/publicaciones.csv --status STATUS.md || true
+          python -m agents.meta.run --catalogo queues/publicaciones.csv --status STATUS.md
+      - name: Meta – Campaigns
+        env:
+          META_PAGE_ACCESS_TOKEN: ${{ secrets.META_PAGE_ACCESS_TOKEN }}
+          META_PAGE_ID: ${{ secrets.META_PAGE_ID }}
+          META_AD_ACCOUNT_ID: ${{ secrets.META_AD_ACCOUNT_ID }}
+          META_PIXEL_ID: ${{ secrets.META_PIXEL_ID }}
+        run: python -m agents.meta.campaigns --status STATUS.md
       - name: LinkedIn
         env:
           LINKEDIN_ACCESS_TOKEN: ${{ secrets.LINKEDIN_ACCESS_TOKEN }}
         run: |
-          python -m agents.linkedin.run --status STATUS.md || true
+          python -m agents.linkedin.run --status STATUS.md
+      - name: Learn / Feedback
+        run: python -m learn.feedback
       - name: Artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: vendedor360-artifacts
           path: |
-            artifacts/*
-            logs/*
+            artifacts/**
+            logs/**
             STATUS.md

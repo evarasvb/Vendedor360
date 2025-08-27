@@ -1,4 +1,14 @@
-palabra,sku,empresa,precio_max,match_min
-"resma oficio 75g",,"FIRMAVB OFICINA",4000,100
-"cloro 5 litros",,"FIRMAVB ASEO",3500,100
-"guantes nitrilo m",,"FIRMAVB SALUD",350,100
+palabra,sku,empresa,precio_max,match_min,prioridad,nota
+"resma oficio 75g",,"FIRMAVB OFICINA",4000,100,,
+"cloro 5 litros",,"FIRMAVB ASEO",3500,100,,
+"guantes nitrilo m",,"FIRMAVB SALUD",350,100,,
+"papel multiproposito a4 75g",,,,90,1,"oficina | de precios 2025"
+"silla ergonomica malla",,,,80,1,"ergonomia | de precios 2025"
+"trituradora papel 12 hojas",,,,80,2,"trituradoras | de precios 2025"
+"vasos plumavit 12 oz",,,,70,1,"desechables | inventario face"
+"vaso 9oz pet 78mm",,,,70,1,"desechables | inventario face"
+"contenedor aluminio 21x12x3",,,,70,1,"desechables | inventario face"
+"tapa vaso termico 10 oz",,,,70,2,"desechables | inventario face"
+"engrapadora rexel hd70",,,,85,1,"oficina | de precios 2025"
+"mouse kensington pro fit",,,,85,1,"oficina | de precios 2025"
+"tijera barrilito 7",,,,85,1,"oficina | de precios 2025"

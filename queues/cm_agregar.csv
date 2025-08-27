@@ -1,0 +1,4 @@
+marca,codigo,descripcion,precio,region,stock,imagenes
+"Barrilito","BAR-123","Tijera Barrilito 7'' acero inoxidable",1990,"RM;V;VIII",300,"assets/barrilito/ti-barrilito-7.jpg"
+"Kensington","KEN-221","Mouse Kensington Pro Fit inalámbrico",12990,"RM;II;V",120,"assets/kensington/mouse-pro-fit.jpg"
+"Rexel","REX-540","Engrapadora Rexel HD70 alta capacidad",17990,"RM;IV;V;VIII",90,"assets/rexel/engrapadora-hd70.jpg"
