@@ -3,3 +3,35 @@ Se actualiza automáticamente en cada ejecución del orquestador.
 ## Lici
 - Fecha: 2025-08-28T02:43:06.288076
 - estado:error, motivo:faltan_credenciales
+
+## Credenciales Lici
+- Email: contacto@firmavb.cl
+- Contraseña: Firmavb#2025
+
+## Credenciales Wherex
+- Usuario: evaras@firmavb.cl
+- Contraseña: B1h1m4nd2@
+
+## Credenciales Senegocia
+- Usuario: contacto@firmavb.cl
+- Contraseña: B1h1m4nd2
+
+## Credenciales Facebook
+- Usuario: asistenteone@firmavb.cl
+- Contraseña: Firmavb2025
+
+## Credenciales LinkedIn
+- Usuario: ee_varas@yahoo.es
+- Contraseña: eevb9252
+
+## Credenciales MercadoPublico
+- Usuario: 14171737-5
+- Contraseña: B1h1m4nd2
+
+## Credenciales Ariba
+- Usuario: evaras@firmavb.cl
+- Contraseña: Firmavb@2015
+
+## Credenciales MercadoLibre
+- Usuario: hola@tiendaid.cl
+- Contraseña: Firmavb#2024
