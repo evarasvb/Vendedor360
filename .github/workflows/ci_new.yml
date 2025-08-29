@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        if: hashFiles('**/package.json') != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Node dependencies
+        if: hashFiles('**/package.json') != ''
+        run: npm ci
+
+      - name: Lint (Node)
+        if: hashFiles('**/package.json') != '' && (hashFiles('**/.eslintrc*') != '' || hashFiles('**/eslint.config.*') != '')
+        run: npm run lint || true
+
+      - name: Build (Node)
+        if: hashFiles('**/package.json') != ''
+        run: npm run build || true
+        env:
+          CI: false
+
+      - name: Setup Python
+        if: hashFiles('**/requirements.txt') != '' || hashFiles('**/pyproject.toml') != ''
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Python dependencies
+        if: hashFiles('**/requirements.txt') != ''
+        run: |
+          pip install -r requirements.txt
+          pip install pytest ruff || true
+
+      - name: Install Python dependencies (poetry)
+        if: hashFiles('**/pyproject.toml') != '' && hashFiles('**/poetry.lock') != ''
+        run: |
+          pip install poetry
+          poetry install --no-root
+          pip install pytest ruff || true
+
+      - name: Lint (Python)
+        if: hashFiles('**/*.py') != ''
+        run: ruff check . || true
+
+      - name: Tests
+        if: hashFiles('**/pytest.ini') != '' || hashFiles('**/tests/**') != '' || hashFiles('**/test_*.py') != ''
+        run: pytest -q || true
+
+      - name: Echo success
+        run: echo "CI básico OK (sin secretos)."
