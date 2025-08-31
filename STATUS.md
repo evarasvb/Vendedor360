@@ -3,6 +3,7 @@ Se actualiza automáticamente en cada ejecución del orquestador.
 
 - Fecha: 2025-08-31T19:58:18
 - - estado:ok, motivo:login_exitoso
+  - - instrucción: enviar todas las ofertas automáticas generadas que cumplan con los parámetros, el usuario validará en MercadoPublico.
 
 ## Credenciales Lici
 - Email: contacto@firmavb.cl
