@@ -1,8 +1,8 @@
 # Vendedor 360 – Estado
 Se actualiza automáticamente en cada ejecución del orquestador.
-## Lici
-- Fecha: 2025-08-28T02:43:06.288076
-- estado:error, motivo:faltan_credenciales
+
+- Fecha: 2025-08-31T19:58:18
+- - estado:ok, motivo:login_exitoso
 
 ## Credenciales Lici
 - Email: contacto@firmavb.cl
