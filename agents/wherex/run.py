@@ -15,7 +15,8 @@ def need_env():
     return os.getenv("WHEREX_USER") and os.getenv("WHEREX_PASS")
 
 def login(page, user, pwd):
-    page.goto("https://login.wherex.com", wait_until="domcontentloaded")
+    page.goto("https://login.wherex.com", wait_until
+              ="domcontentloaded")
     page.get_by_label("Correo").fill(user)
     page.get_by_label("Contraseña").fill(pwd)
     page.get_by_role("button", name="Ingresar").click()
@@ -50,7 +51,9 @@ def main():
 
     if not need_env():
         append_status(args.status, "Wherex", [{"estado": "error", "motivo": "faltan_credenciales"}])
+        
         return 1
+
 
     queue = read_queue_csv(args.cola)
     resultados = []
@@ -67,7 +70,9 @@ def main():
                 except PWTimeout:
                     log.exception("timeout")
                     res = {"palabra": palabra, "estado": "error", "motivo": "timeout"}
+ 
                 except Exception as e:
+
                     log.exception("error")
                     res = {"palabra": palabra, "estado": "error", "motivo": str(e)}
                 resultados.append(res)
