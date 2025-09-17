@@ -5,3 +5,7 @@ token.json
 # artefactos
 artifacts/
 logs/
+storage_state.json
+*.session
+data/*.xlsx
+data/*.json
