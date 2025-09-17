@@ -1,7 +1,10 @@
+import os
+import time
 from pathlib import Path
 from typing import Dict, Optional
+from urllib.parse import urlparse
+
 from playwright.sync_api import Page
-import time
 
 MP_HOME = "https://buscador.mercadopublico.cl/compra-agil"
 
@@ -10,12 +13,42 @@ def _fill_input(page: Page, selector: str, value: Optional[str]):
         page.locator(selector).fill(str(value))
 
 def login_if_needed(page: Page, storage_state_path: str = "storage_state.json"):
+    """Ensure the MP session is active before interacting with the site.
+
+    If a storage state file already exists the context was initialised with it
+    and we simply navigate to the home. Otherwise we attempt to restore a
+    session using the cookie provided via ``MP_SESSION_COOKIE`` and, if
+    available, store the ``MP_TICKET`` token in ``localStorage``.
     """
-    Usa estado persistente si existe. Si no, asume sesión ya abierta vía cookie o ticket.
-    Ajusta este método con tus selectores reales de sesión iniciada.
-    """
+
+    storage_file = Path(storage_state_path)
+    if storage_file.is_file():
+        page.goto(MP_HOME, wait_until="domcontentloaded")
+        return
+
+    cookie_header = os.getenv("MP_SESSION_COOKIE", "").strip()
+    if cookie_header:
+        hostname = urlparse(MP_HOME).hostname or ""
+        domain = f".{hostname}" if hostname and not hostname.startswith(".") else hostname
+        if domain:
+            cookies = []
+            for chunk in cookie_header.split(";"):
+                name, _, value = chunk.strip().partition("=")
+                if name and value:
+                    cookies.append({
+                        "name": name.strip(),
+                        "value": value.strip(),
+                        "domain": domain,
+                        "path": "/",
+                    })
+            if cookies:
+                page.context.add_cookies(cookies)
+
     page.goto(MP_HOME, wait_until="domcontentloaded")
-    return
+
+    ticket = os.getenv("MP_TICKET")
+    if ticket:
+        page.evaluate("ticket => window.localStorage.setItem('MP_TICKET', ticket)", ticket)
 
 def postular(row: Dict[str, str], page: Page) -> None:
     """
@@ -31,7 +64,9 @@ def postular(row: Dict[str, str], page: Page) -> None:
     page.wait_for_timeout(500)
 
     # 2) Ir a formulario de postulación (ajusta selectores reales)
-    page.get_by_role("button", name="Postular").click()
+    postular_btn = page.get_by_role("button", name="Postular")
+    postular_btn.wait_for(state="visible", timeout=10000)
+    postular_btn.click()
     page.wait_for_load_state("domcontentloaded")
 
     # 3) Completar formulario básico
@@ -48,6 +83,8 @@ def postular(row: Dict[str, str], page: Page) -> None:
     _attach('input[type="file"][name="cotizacion"]', "coti_path")
 
     # 5) Enviar
-    page.get_by_role("button", name="Enviar oferta").click()
+    enviar_btn = page.get_by_role("button", name="Enviar oferta")
+    enviar_btn.wait_for(state="visible", timeout=10000)
+    enviar_btn.click()
     page.wait_for_selector("text=Oferta enviada", timeout=15000)
     time.sleep(0.5)
