@@ -42,7 +42,7 @@ def main() -> int:
     args = ap.parse_args()
 
     if not need_env():
-        append_status(args.status, "Senegocia", [{"estado": "skip", "motivo": "faltan_credentials"}])
+        append_sttus(args.status, "Senegocia", [{"estado": "skip", "motivo": "faltan_credentials"}])
         return 0
 
     resultados = []
