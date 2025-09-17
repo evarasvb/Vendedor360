@@ -1,0 +1,88 @@
+# .github/workflows/agent.yml
+name: Repo Agent
+on:
+  issue_comment:
+    types: [created]
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+  actions: write
+jobs:
+  run:
+    if: startsWith(github.event.comment.body, '/agent ')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse command
+        id: cmd
+        run: |
+          CMD="${GITHUB_EVENT_PATH}"
+          BODY=$(jq -r '.comment.body' "$CMD")
+          ARG=$(echo "$BODY" | sed 's#^/agent ##')
+          echo "arg=$ARG" >> $GITHUB_OUTPUT
+
+      # 1) /agent run datahub
+      - name: Trigger DataHub
+        if: steps.cmd.outputs.arg == 'run datahub'
+        run: |
+          gh workflow run datahub.yml --ref "${{ github.ref_name || 'main' }}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # 2) /agent release agilvb v0.1.0
+      - name: Release AgilVB to TestPyPI
+        if: startsWith(steps.cmd.outputs.arg, 'release agilvb ')
+        run: |
+          TAG=$(echo "${{ steps.cmd.outputs.arg }}" | awk '{print $3}')
+          python -m pip install --upgrade build twine
+          python -m build
+          twine upload --repository-url https://test.pypi.org/legacy/ dist/* \
+            -u "${TESTPYPI_USERNAME}" -p "${TESTPYPI_PASSWORD}"
+          echo "Released $TAG to TestPyPI"
+        env:
+          TESTPYPI_USERNAME: ${{ secrets.TESTPYPI_USERNAME }}
+          TESTPYPI_PASSWORD: ${{ secrets.TESTPYPI_PASSWORD }}
+
+      # 3) /agent bootstrap planning
+      - name: Bootstrap planning (issues base)
+        if: steps.cmd.outputs.arg == 'bootstrap planning'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = `
+            - [ ] QA: Workflow DataHub estable
+            - [ ] Telemetría mínima de jobs
+            - [ ] Programar corridas y alertas
+            `;
+            await github.rest.issues.create({
+              owner: context.repo.owner, repo: context.repo.repo,
+              title: 'Plan: arrancar backlog', body
+            });
+
+      # 4) /agent connect dashboard
+      - name: Open PR to wire dashboard to Sheets
+        if: steps.cmd.outputs.arg == 'connect dashboard'
+        run: |
+          git config user.name "repo-agent"
+          git config user.email "repo-agent@users.noreply.github.com"
+          git checkout -b feat/connect-sheets
+          mkdir -p app
+          cat > app/data_source.py <<'PY'
+import os, gspread, pandas as pd
+from oauth2client.service_account import ServiceAccountCredentials
+SHEET_NAME = os.getenv('SHEET_NAME', 'Vendedor360_DataHub')
+def fetch(tab):
+    scope=['https://spreadsheets.google.com/feeds','https://www.googleapis.com/auth/drive']
+    creds = ServiceAccountCredentials.from_json_keyfile_name(os.environ['GOOGLE_SERVICE_ACCOUNT_JSON'], scope)
+    gs = gspread.authorize(creds)
+    ws = gs.open(SHEET_NAME).worksheet(tab)
+    return pd.DataFrame(ws.get_all_records())
+PY
+          git add -A
+          git commit -m "feat(dashboard): connect to Google Sheets via data_source.py"
+          git push -u origin feat/connect-sheets
+          gh pr create --title "Connect dashboard to Sheets" --body "Adds data_source.py and wiring." --base main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
