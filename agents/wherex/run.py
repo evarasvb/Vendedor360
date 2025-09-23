@@ -41,7 +41,8 @@ def run_item(page, palabra: str) -> dict:
     ART.mkdir(parents=True, exist_ok=True)
     img = ART / f"wherex_{ts}.png"
     page.screenshot(path=str(img), full_page=True)
-    return {"palabra": palabra, "estado": "postulada", "evidencia": str(img)}
+    # Solo se realizó la búsqueda/visualización, no la postulación.
+    return {"palabra": palabra, "estado": "buscada", "evidencia": str(img)}
 
 def main():
     ap = argparse.ArgumentParser()
