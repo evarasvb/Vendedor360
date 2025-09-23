@@ -33,7 +33,9 @@ def run_item(page, palabra: str) -> dict:
     ART.mkdir(parents=True, exist_ok=True)
     img = ART / f"senegocia_{ts}.png"
     page.screenshot(path=str(img), full_page=True)
-    return {"palabra": palabra, "estado": "postulada", "evidencia": str(img)}
+    # Nota: este agente solo realiza la búsqueda y captura evidencia.
+    # No envía ofertas automáticamente, por lo que no debe marcarse como 'postulada'.
+    return {"palabra": palabra, "estado": "buscada", "evidencia": str(img)}
 
 def main() -> int:
     ap = argparse.ArgumentParser()
@@ -42,7 +44,7 @@ def main() -> int:
     args = ap.parse_args()
 
     if not need_env():
-        append_sttus(args.status, "Senegocia", [{"estado": "skip", "motivo": "faltan_credentials"}])
+        append_status(args.status, "Senegocia", [{"estado": "skip", "motivo": "faltan_credenciales"}])
         return 0
 
     resultados = []
