@@ -37,11 +37,95 @@ def run_item(page, palabra: str) -> dict:
         return {"palabra": palabra, "estado": "omitido", "motivo": "exclusion_logo_titulo"}
     cards[0].click()
     page.wait_for_load_state("networkidle")
+    # Evidencia antes de intentar postular
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     ART.mkdir(parents=True, exist_ok=True)
-    img = ART / f"wherex_{ts}.png"
-    page.screenshot(path=str(img), full_page=True)
-    return {"palabra": palabra, "estado": "postulada", "evidencia": str(img)}
+    img_before = ART / f"wherex_before_{ts}.png"
+    page.screenshot(path=str(img_before), full_page=True)
+    
+    # Intentar postular y verificar resultado
+    did_click = _attempt_application(page)
+    did_verify = _verify_application(page)
+    
+    # Evidencia después del intento/verificación
+    img_after = ART / f"wherex_after_{ts}.png"
+    page.screenshot(path=str(img_after), full_page=True)
+    
+    estado = "postulada" if did_verify else ("intento_no_confirmado" if did_click else "sin_postulacion")
+    return {
+        "palabra": palabra,
+        "estado": estado,
+        "evidencia_antes": str(img_before),
+        "evidencia_despues": str(img_after),
+    }
+
+def _attempt_application(page) -> bool:
+    """Intenta hacer clic en controles típicos de postulación.
+
+    Devuelve True si se detectó y clickeó algún control de postulación.
+    """
+    button_labels = [
+        "Postular",
+        "Participar",
+        "Enviar",
+        "Enviar oferta",
+        "Postulación",
+        "Participar en licitación",
+    ]
+    for label in button_labels:
+        try:
+            btn = page.get_by_role("button", name=label)
+            if btn and btn.is_visible():
+                btn.click()
+                page.wait_for_load_state("networkidle")
+                # Confirmaciones adicionales frecuentes
+                for confirm_label in ["Confirmar", "Sí", "Aceptar", "Enviar", "Enviar oferta"]:
+                    try:
+                        cbtn = page.get_by_role("button", name=confirm_label)
+                        if cbtn and cbtn.is_visible():
+                            cbtn.click()
+                            page.wait_for_load_state("networkidle")
+                            break
+                    except Exception:
+                        continue
+                page.wait_for_timeout(700)
+                return True
+        except Exception:
+            continue
+    # Fallback por texto genérico
+    try:
+        generic = page.locator("text=/Postular|Participar|Enviar/i").first
+        if generic and generic.is_visible():
+            generic.click()
+            page.wait_for_load_state("networkidle")
+            page.wait_for_timeout(500)
+            return True
+    except Exception:
+        pass
+    return False
+
+def _verify_application(page) -> bool:
+    """Verifica en la interfaz si la postulación quedó registrada."""
+    indicators = [
+        # Botones/acciones visibles cuando ya estás participando
+        "text=/Retirar(\s+postulaci[oó]n)?/i",
+        "text=/Editar(\s+oferta)?/i",
+        # Mensajes/estados comunes
+        "text=/Oferta\s+enviada/i",
+        "text=/Postulaci[oó]n\s+enviada/i",
+        "text=/Ya\s+est[aá]s\s+participando/i",
+        "text=/Ya\s+postulaste/i",
+        "text=/Participando/i",
+        "text=/Estado\s*:\s*Postulad[ao]/i",
+    ]
+    try:
+        for sel in indicators:
+            loc = page.locator(sel).first
+            if loc and loc.is_visible():
+                return True
+    except Exception:
+        return False
+    return False
 
 def main():
     ap = argparse.ArgumentParser()
