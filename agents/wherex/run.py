@@ -22,6 +22,49 @@ def login(page, user, pwd):
     page.get_by_role("button", name="Ingresar").click()
     page.wait_for_load_state("networkidle")
 
+def _verify_postulation(page) -> bool:
+    try:
+        # Indicadores de haber quedado participando
+        for label in ["Participando", "Postulado", "Ya estás participando", "Oferta enviada"]:
+            el = page.get_by_text(label)
+            if el and el.is_visible():
+                return True
+        # Alternativamente, que ya no exista el botón de postular
+        post_btn = page.get_by_role("button", name="Postular")
+        if post_btn and not post_btn.is_visible():
+            return True
+    except Exception:
+        pass
+    return False
+
+def apply_for_bid(page) -> tuple[bool, bool]:
+    applied_click = False
+    confirmed = False
+    try:
+        for label in ["Postular", "Participar", "Enviar", "Postulación", "Participar en licitación"]:
+            try:
+                btn = page.get_by_role("button", name=label)
+                if btn and btn.is_visible():
+                    btn.click()
+                    page.wait_for_load_state("networkidle")
+                    applied_click = True
+                    for confirm_label in ["Confirmar", "Sí", "Enviar", "Enviar oferta", "Aceptar"]:
+                        try:
+                            confirm_btn = page.get_by_role("button", name=confirm_label)
+                            if confirm_btn and confirm_btn.is_visible():
+                                confirm_btn.click()
+                                page.wait_for_load_state("networkidle")
+                                break
+                        except Exception:
+                            continue
+                    break
+            except Exception:
+                continue
+        confirmed = _verify_postulation(page)
+    except Exception:
+        pass
+    return applied_click, confirmed
+
 def run_item(page, palabra: str) -> dict:
     if contains_exclusion(palabra, EXCLUS):
         return {"palabra": palabra, "estado": "omitido", "motivo": "exclusion_logo"}
@@ -37,11 +80,17 @@ def run_item(page, palabra: str) -> dict:
         return {"palabra": palabra, "estado": "omitido", "motivo": "exclusion_logo_titulo"}
     cards[0].click()
     page.wait_for_load_state("networkidle")
+    # Evidencia antes
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     ART.mkdir(parents=True, exist_ok=True)
-    img = ART / f"wherex_{ts}.png"
-    page.screenshot(path=str(img), full_page=True)
-    return {"palabra": palabra, "estado": "postulada", "evidencia": str(img)}
+    before_img = ART / f"wherex_{ts}_before.png"
+    page.screenshot(path=str(before_img), full_page=True)
+    clicked, confirmed = apply_for_bid(page)
+    # Evidencia después
+    after_img = ART / f"wherex_{ts}_after.png"
+    page.screenshot(path=str(after_img), full_page=True)
+    estado = "postulacion_confirmada" if confirmed else ("postulacion_intentada" if clicked else "no_postulado")
+    return {"palabra": palabra, "estado": estado, "evidencia_before": str(before_img), "evidencia_after": str(after_img)}
 
 def main():
     ap = argparse.ArgumentParser()
