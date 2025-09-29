@@ -1,0 +1,19 @@
+# YAML de configuración del agente Vendedor360
+endpoints:
+  compras_agiles_listado: "https://api.mercadopublico.cl/servicios/v1/publico/ordenesdecompra.json"  # Ajustar al endpoint oficial de Compra Ágil si corresponde
+params:
+  ventana_horas: 24        # VENTANA_HORAS
+  max_resultados: 200      # MAX_RESULTADOS
+  modo: run_once           # run_once | watch
+  watch_interval_min: 10   # válido si modo=watch
+
+paths:
+  postulaciones_csv: "./queues/postulaciones.csv"
+  exclusiones_json: "./agents/exclusiones.json"
+  status_md: "./STATUS.md"
+  logs_dir: "./logs"
+
+match:
+  estricto_100: true
+  normalizar_minusculas: true
+  quita_tildes: true
