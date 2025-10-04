@@ -26,11 +26,11 @@ jobs:
           mkdir -p queues
           if [ ! -f queues/postulaciones.csv ]; then
             cat > queues/postulaciones.csv <<'CSV'
-palabra,match_min
-papel copy 75g,80
-sillas ergonomicas,70
-alcohol gel 1L,70
-CSV
+                      palabra,match_min
+                      papel copy 75g,80
+                      sillas ergonomicas,70
+                      alcohol gel 1L,70
+                      CSV
           fi
 
       - name: Run Wherex (one-shot)
