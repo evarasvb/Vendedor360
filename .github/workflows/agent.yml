@@ -84,5 +84,12 @@ PY
           git push -u origin feat/connect-sheets
           gh pr create --title "Connect dashboard to Sheets" --body "Adds data_source.py and wiring." --base main
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+  #  # 5) /agent run wherex-one-shot
+  - name: Trigger Wherex One-Shot
+    if: steps.cmd.outputs.arg == 'run wherex-one-shot'
+    run: |
+      gh workflow run "Wherex One-Shot" --ref "${{ github.ref_name || 'main' }}"
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
