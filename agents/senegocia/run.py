@@ -8,7 +8,7 @@ from agents.common.status import append_status, write_json_log
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("senegocia")
-ART = pathlib.Path("artifacts/senegocia")
+ART = paartifacts/senegocia")
 BASE = pathlib.Path(__file__).resolve().parent.parent
 EXCLUS = load_exclusions(BASE)
 
@@ -42,7 +42,7 @@ def main() -> int:
     args = ap.parse_args()
 
     if not need_env():
-        append_sttus(args.status, "Senegocia", [{"estado": "skip", "motivo": "faltan_credentials"}])
+        append_status(args.status, "Senegocia", [{"estado": "skip", "motivo": "faltan_credenciales"}])
         return 0
 
     resultados = []
