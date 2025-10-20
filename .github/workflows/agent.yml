@@ -1,26 +1,28 @@
-# .github/workflows/agent.yml
 name: Repo Agent
 on:
   issue_comment:
     types: [created]
+
 permissions:
   contents: write
   issues: write
   pull-requests: write
   actions: write
+
 jobs:
   run:
     if: startsWith(github.event.comment.body, '/agent ')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - name: Parse command
         id: cmd
         run: |
           CMD="${GITHUB_EVENT_PATH}"
           BODY=$(jq -r '.comment.body' "$CMD")
           ARG=$(echo "$BODY" | sed 's#^/agent ##')
-          echo "arg=$ARG" >> $GITHUB_OUTPUT
+          echo "arg=$ARG" >> "$GITHUB_OUTPUT"
 
       # 1) /agent run datahub
       - name: Trigger DataHub
@@ -37,8 +39,7 @@ jobs:
           TAG=$(echo "${{ steps.cmd.outputs.arg }}" | awk '{print $3}')
           python -m pip install --upgrade build twine
           python -m build
-          twine upload --repository-url https://test.pypi.org/legacy/ dist/* \
-            -u "${TESTPYPI_USERNAME}" -p "${TESTPYPI_PASSWORD}"
+          twine upload --repository-url https://test.pypi.org/legacy/ dist/* -u "${TESTPYPI_USERNAME}" -p "${TESTPYPI_PASSWORD}"
           echo "Released $TAG to TestPyPI"
         env:
           TESTPYPI_USERNAME: ${{ secrets.TESTPYPI_USERNAME }}
@@ -56,8 +57,10 @@ jobs:
             - [ ] Programar corridas y alertas
             `;
             await github.rest.issues.create({
-              owner: context.repo.owner, repo: context.repo.repo,
-              title: 'Plan: arrancar backlog', body
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: 'Plan: arrancar backlog',
+              body,
             });
 
       # 4) /agent connect dashboard
@@ -69,12 +72,23 @@ jobs:
           git checkout -b feat/connect-sheets
           mkdir -p app
           cat > app/data_source.py <<'PY'
-import os, gspread, pandas as pd
+import os
+
+import gspread
+import pandas as pd
 from oauth2client.service_account import ServiceAccountCredentials
+
 SHEET_NAME = os.getenv('SHEET_NAME', 'Vendedor360_DataHub')
+
+
 def fetch(tab):
-    scope=['https://spreadsheets.google.com/feeds','https://www.googleapis.com/auth/drive']
-    creds = ServiceAccountCredentials.from_json_keyfile_name(os.environ['GOOGLE_SERVICE_ACCOUNT_JSON'], scope)
+    scope = [
+        'https://spreadsheets.google.com/feeds',
+        'https://www.googleapis.com/auth/drive',
+    ]
+    creds = ServiceAccountCredentials.from_json_keyfile_name(
+        os.environ['GOOGLE_SERVICE_ACCOUNT_JSON'], scope
+    )
     gs = gspread.authorize(creds)
     ws = gs.open(SHEET_NAME).worksheet(tab)
     return pd.DataFrame(ws.get_all_records())
