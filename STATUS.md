@@ -8,6 +8,7 @@ Se actualiza automáticamente en cada ejecución del orquestador.
 - Estado: ok
 - Motivo: login_exitoso
 - Instrucción: enviar todas las ofertas automáticas generadas que cumplan con los parámetros; el usuario validará en Mercado Público.
+- Nota operativa: el módulo Lici quedó integrado al orquestador para revisar `auto_bids` y registrar la evidencia en `artifacts/`.
 
 ## Gestión de credenciales
 - Las credenciales se administran mediante secretos de GitHub y nunca se registran en STATUS.md.
