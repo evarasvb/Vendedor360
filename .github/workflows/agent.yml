@@ -1,4 +1,4 @@
-name: Open PR to wire dashboard to Sheets
+name: Connect Dashboard to Sheets
 
 on:
   workflow_dispatch:
@@ -7,10 +7,10 @@ jobs:
   connect_dashboard:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up git config
+      - name: Set git config
         run: |
           git config user.name "repo-agent"
           git config user.email "repo-agent@users.noreply.github.com"
@@ -18,18 +18,16 @@ jobs:
       - name: Create feature branch
         run: git checkout -b feat/connect-sheets
 
-      - name: Add dashboard connector
+      - name: Add data_source.py
         run: git add app/data_source.py
 
-      - name: Commit changes
-        run: git commit -m "feat(dashboard): connect to Google Sheets via data_source.py"
-        continue-on-error: true
+      - name: Commit change
+        run: git commit -m "feat: connect Google Sheets dashboard"
 
       - name: Push branch
         run: git push -u origin feat/connect-sheets
 
       - name: Create Pull Request
-        run: gh pr create --title "Connect dashboard to Sheets" --body "Adds data_source.py and wiring." --base main
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+        run: gh pr create --title "Connect dashboard to Sheets" --body "Adds data_source.py and wiring." --base main
