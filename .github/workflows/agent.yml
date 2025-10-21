@@ -1,13 +1,35 @@
-       - name: Open PR to wire dashboard to Sheets
-     if: steps.cmd.outputs.arg == 'connect dashboard'
-     run: |
-       git config user.name "repo-agent"
-       git config user.email "repo-agent@users.noreply.github.com"
-       git checkout -b feat/connect-sheets
-       git add app/data_source.py
-       git commit -m "feat(dashboard): connect to Google Sheets via data_source.py"
-       git push -u origin feat/connect-sheets
-       gh pr create --title "Connect dashboard to Sheets" --body "Adds data_source.py and wiring." --base main
-     env:
-       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-       GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+name: Open PR to wire dashboard to Sheets
+
+on:
+  workflow_dispatch:
+
+jobs:
+  connect_dashboard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up git config
+        run: |
+          git config user.name "repo-agent"
+          git config user.email "repo-agent@users.noreply.github.com"
+
+      - name: Create feature branch
+        run: git checkout -b feat/connect-sheets
+
+      - name: Add dashboard connector
+        run: git add app/data_source.py
+
+      - name: Commit changes
+        run: git commit -m "feat(dashboard): connect to Google Sheets via data_source.py"
+        continue-on-error: true
+
+      - name: Push branch
+        run: git push -u origin feat/connect-sheets
+
+      - name: Create Pull Request
+        run: gh pr create --title "Connect dashboard to Sheets" --body "Adds data_source.py and wiring." --base main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
