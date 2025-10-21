@@ -1,29 +1,13 @@
-      - name: Open PR to wire dashboard to Sheets
-        if: steps.cmd.outputs.arg == 'connect dashboard'
-        run: |
-          git config user.name "repo-agent"
-          git config user.email "repo-agent@users.noreply.github.com"
-          git checkout -b feat/connect-sheets
-          mkdir -p app
-          cat <<'PY' > app/data_source.py
-import os
-import gspread
-import pandas as pd
-from oauth2client.service_account import ServiceAccountCredentials
-
-SHEET_NAME = os.getenv('SHEET_NAME', 'Vendedor360_DataHub')
-
-def fetch(tab):
-    scope = ['https://spreadsheets.google.com/feeds','https://www.googleapis.com/auth/drive']
-    creds = ServiceAccountCredentials.from_json_keyfile_name(os.environ['GOOGLE_SERVICE_ACCOUNT_JSON'], scope)
-    gs = gspread.authorize(creds)
-    ws = gs.open(SHEET_NAME).worksheet(tab)
-    return pd.DataFrame(ws.get_all_records())
-PY
-          git add -A
-          git commit -m "feat(dashboard): connect to Google Sheets via data_source.py"
-          git push -u origin feat/connect-sheets
-          gh pr create --title "Connect dashboard to Sheets" --body "Adds data_source.py and wiring." --base main
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+       - name: Open PR to wire dashboard to Sheets
+     if: steps.cmd.outputs.arg == 'connect dashboard'
+     run: |
+       git config user.name "repo-agent"
+       git config user.email "repo-agent@users.noreply.github.com"
+       git checkout -b feat/connect-sheets
+       git add app/data_source.py
+       git commit -m "feat(dashboard): connect to Google Sheets via data_source.py"
+       git push -u origin feat/connect-sheets
+       gh pr create --title "Connect dashboard to Sheets" --body "Adds data_source.py and wiring." --base main
+     env:
+       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+       GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
