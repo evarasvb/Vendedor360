@@ -8,6 +8,9 @@ from pathlib import Path
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException, NoSuchElementException
 sys.path.append(str(Path(__file__).resolve().parent.parent / "common"))
 from queue import load_postulaciones_queue
 from status import actualizar_status
@@ -55,8 +58,11 @@ def cambiar_empresa(driver, empresa):
     except Exception:
         logging.warning(f"No se pudo cambiar a empresa: {empresa}")
 
+LISTING_URL = "https://lici.cl/auto_bids"
+
+
 def obtener_ofertas(driver):
-    driver.get("https://lici.cl/auto_bids")
+    driver.get(LISTING_URL)
     time.sleep(2)
     # ATENCIÓN: Ajusta los selectores reales según la estructura HTML de lici.cl (dummy de ejemplo abajo).
     cards = driver.find_elements(By.CSS_SELECTOR, ".card")
@@ -78,28 +84,147 @@ def obtener_ofertas(driver):
                 "presupuesto": presupuesto,
                 "ofertado": ofertado,
                 "estado": estado,
-                "link": link
+                "link": link,
+                "element": c,
+                "list_url": driver.current_url
             })
         except Exception as ex:
             logging.error(f"Error parsing tarjeta: {ex}")
     return ofertas
 
-def ajustar_oferta(driver, card, nuevo_monto):
-    # Implementa aquí el cambio de monto en la interfaz de lici.cl si es posible.
-    # Ejemplo placeholder:
-    # edit_btn = card.find_element(By.CSS_SELECTOR, ".edit")
-    # edit_btn.click(); ...
-    # caja_monto = driver.find_element(By.NAME, "monto")
-    # caja_monto.clear()
-    # caja_monto.send_keys(str(int(nuevo_monto)))
-    # driver.find_element(By.CSS_SELECTOR, ".guardar").click()
-    pass
+def _abrir_detalle_oferta(driver, oferta):
+    if oferta.get("_detail_open"):
+        return oferta.get("_origin_window"), oferta.get("list_url"), False
 
-def enviar_oferta(driver, card):
-    # Implementa aquí el "click" en el botón de enviar propuesta si existe
-    # Ejemplo placeholder:
-    # driver.find_element(By.CSS_SELECTOR, ".enviar-propuesta").click()
-    pass
+    origen = driver.current_window_handle
+    list_url = oferta.get("list_url", LISTING_URL)
+    try:
+        enlace = oferta.get("link")
+        if enlace:
+            driver.get(enlace)
+        elif oferta.get("element"):
+            driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", oferta["element"])
+            click_target = oferta["element"].find_element(By.TAG_NAME, "a")
+            click_target.click()
+        else:
+            raise ValueError("La oferta no tiene referencia navegable")
+
+        WebDriverWait(driver, 10).until(lambda d: d.current_url != list_url or len(d.window_handles) > 1)
+        if len(driver.window_handles) > 1:
+            for handle in driver.window_handles:
+                if handle != origen:
+                    driver.switch_to.window(handle)
+                    break
+
+        WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
+        oferta["_detail_open"] = True
+        oferta["_origin_window"] = origen
+        return origen, list_url, True
+    except Exception as exc:
+        logging.error(f"No se pudo abrir detalle de oferta: {exc}")
+        raise
+
+
+def _encontrar_elemento(driver, candidatos):
+    for by, selector in candidatos:
+        try:
+            elemento = WebDriverWait(driver, 5).until(EC.presence_of_element_located((by, selector)))
+            return elemento
+        except TimeoutException:
+            continue
+        except Exception:
+            continue
+    raise NoSuchElementException(f"No se encontró ningún elemento con los selectores: {candidatos}")
+
+
+def ajustar_oferta(driver, oferta, nuevo_monto):
+    origen, list_url, opened_here = _abrir_detalle_oferta(driver, oferta)
+    try:
+        campo_monto = _encontrar_elemento(driver, [
+            (By.CSS_SELECTOR, "input[name='monto']"),
+            (By.CSS_SELECTOR, "input[name='offer_amount']"),
+            (By.CSS_SELECTOR, "input[name='amount']"),
+            (By.CSS_SELECTOR, "input[id*='monto']"),
+            (By.CSS_SELECTOR, "input[id*='amount']"),
+        ])
+        campo_monto.click()
+        campo_monto.clear()
+        campo_monto.send_keys(str(int(round(nuevo_monto))))
+
+        boton_guardar = _encontrar_elemento(driver, [
+            (By.CSS_SELECTOR, "button[type='submit']"),
+            (By.CSS_SELECTOR, "button.guardar"),
+            (By.XPATH, "//button[contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'guardar')]")
+        ])
+        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", boton_guardar)
+        boton_guardar.click()
+
+        try:
+            WebDriverWait(driver, 10).until(EC.any_of(
+                EC.presence_of_element_located((By.CSS_SELECTOR, ".alert-success")),
+                EC.presence_of_element_located((By.CSS_SELECTOR, ".toast-success")),
+                EC.text_to_be_present_in_element((By.TAG_NAME, "body"), "Actualizado")
+            ))
+        except TimeoutException:
+            logging.warning("No se detectó confirmación visual tras guardar la oferta")
+    except Exception as exc:
+        logging.error(f"Error ajustando oferta: {exc}")
+        raise
+    finally:
+        if opened_here:
+            oferta["_detail_open"] = True
+
+
+def enviar_oferta(driver, oferta):
+    origen, list_url, _ = _abrir_detalle_oferta(driver, oferta)
+    try:
+        boton_enviar = _encontrar_elemento(driver, [
+            (By.CSS_SELECTOR, "button.enviar"),
+            (By.CSS_SELECTOR, "button[type='submit'].enviar-oferta"),
+            (By.XPATH, "//button[contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'enviar')]")
+        ])
+        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", boton_enviar)
+        boton_enviar.click()
+
+        try:
+            confirmacion = WebDriverWait(driver, 5).until(EC.element_to_be_clickable((
+                By.XPATH,
+                "//button[contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'confirmar') or "
+                "contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'si')]"
+            )))
+            confirmacion.click()
+        except TimeoutException:
+            pass
+
+        try:
+            WebDriverWait(driver, 5).until(EC.alert_is_present())
+            alerta = driver.switch_to.alert
+            alerta.accept()
+        except TimeoutException:
+            pass
+
+        try:
+            WebDriverWait(driver, 10).until(EC.any_of(
+                EC.presence_of_element_located((By.CSS_SELECTOR, ".alert-success")),
+                EC.presence_of_element_located((By.CSS_SELECTOR, ".toast-success")),
+                EC.text_to_be_present_in_element((By.TAG_NAME, "body"), "enviada")
+            ))
+        except TimeoutException:
+            logging.warning("No se detectó confirmación visual tras enviar la oferta")
+    except Exception as exc:
+        logging.error(f"Error al enviar oferta: {exc}")
+        raise
+    finally:
+        oferta["_detail_open"] = False
+        try:
+            if len(driver.window_handles) > 1:
+                driver.close()
+                driver.switch_to.window(origen)
+            else:
+                if driver.current_url != list_url:
+                    driver.get(list_url)
+        except Exception as exc:
+            logging.warning(f"No se pudo retornar a la lista de ofertas: {exc}")
 
 def guardar_csv(fila):
     os.makedirs(os.path.dirname(OUTPUT_FILE), exist_ok=True)
