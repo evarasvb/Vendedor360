@@ -1,38 +1,14 @@
 # Vendedor 360 – Estado
 Se actualiza automáticamente en cada ejecución del orquestador.
 
+> Las credenciales y tokens se administran mediante GitHub Secrets. Este archivo solo almacena resultados de ejecución y notas operativas.
+
+## Última ejecución registrada (histórico heredado)
 - Fecha: 2025-08-31T19:58:18
-- - estado:ok, motivo:login_exitoso
-  - - instrucción: enviar todas las ofertas automáticas generadas que cumplan con los parámetros, el usuario validará en MercadoPublico.
+- Estado: ok
+- Motivo: login_exitoso
+- Instrucción: enviar todas las ofertas automáticas generadas que cumplan con los parámetros; el usuario validará en Mercado Público.
+- Nota operativa: el módulo Lici quedó integrado al orquestador para revisar `auto_bids` y registrar la evidencia en `artifacts/`.
 
-## Credenciales Lici
-- Email: contacto@firmavb.cl
-- Contraseña: Firmavb#2025
-
-## Credenciales Wherex
-- Usuario: evaras@firmavb.cl
-- Contraseña: B1h1m4nd2@
-
-## Credenciales Senegocia
-- Usuario: contacto@firmavb.cl
-- Contraseña: B1h1m4nd2
-
-## Credenciales Facebook
-- Usuario: asistenteone@firmavb.cl
-- Contraseña: Firmavb2025
-
-## Credenciales LinkedIn
-- Usuario: ee_varas@yahoo.es
-- Contraseña: eevb9252
-
-## Credenciales MercadoPublico
-- Usuario: 14171737-5
-- Contraseña: B1h1m4nd2
-
-## Credenciales Ariba
-- Usuario: evaras@firmavb.cl
-- Contraseña: Firmavb@2015
-
-## Credenciales MercadoLibre
-- Usuario: hola@tiendaid.cl
-- Contraseña: Firmavb#2024
+## Gestión de credenciales
+- Las credenciales se administran mediante secretos de GitHub y nunca se registran en STATUS.md.

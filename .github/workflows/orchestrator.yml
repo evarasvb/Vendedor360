@@ -20,8 +20,37 @@ jobs:
       - name: Install deps
         run: |
           python -m pip install -U pip
-          pip install playwright pandas requests
+          pip install -r requirements.txt
           python -m playwright install --with-deps chromium
+      - name: Preflight checks
+        env:
+          WHEREX_USER: ${{ secrets.WHEREX_USER }}
+          WHEREX_PASS: ${{ secrets.WHEREX_PASS }}
+          SENEGOCIA_USER: ${{ secrets.SENEGOCIA_USER }}
+          SENEGOCIA_PASS: ${{ secrets.SENEGOCIA_PASS }}
+          MP_SESSION_COOKIE: ${{ secrets.MP_SESSION_COOKIE }}
+          MP_TICKET: ${{ secrets.MP_TICKET }}
+          LICI_USER: ${{ secrets.LICI_USER }}
+          LICI_PASS: ${{ secrets.LICI_PASS }}
+          META_PAGE_ACCESS_TOKEN: ${{ secrets.META_PAGE_ACCESS_TOKEN }}
+          META_PAGE_ID: ${{ secrets.META_PAGE_ID }}
+          LINKEDIN_ACCESS_TOKEN: ${{ secrets.LINKEDIN_ACCESS_TOKEN }}
+        run: |
+          python scripts/preflight.py \
+            --status STATUS.md \
+            --runtime-dir artifacts \
+            --runtime-dir logs \
+            --require-env WHEREX_USER \
+            --require-env WHEREX_PASS \
+            --require-env SENEGOCIA_USER \
+            --require-env SENEGOCIA_PASS \
+            --require-env MP_SESSION_COOKIE \
+            --require-env MP_TICKET \
+            --require-env LICI_USER \
+            --require-env LICI_PASS \
+            --require-env META_PAGE_ACCESS_TOKEN \
+            --require-env META_PAGE_ID \
+            --require-env LINKEDIN_ACCESS_TOKEN
       - name: Wherex
         env:
           WHEREX_USER: ${{ secrets.WHEREX_USER }}
@@ -40,6 +69,12 @@ jobs:
           MP_TICKET: ${{ secrets.MP_TICKET }}
         run: |
           python -m agents.mp.run --cola queues/postulaciones.csv --status STATUS.md || true
+      - name: Lici
+        env:
+          LICI_USER: ${{ secrets.LICI_USER }}
+          LICI_PASS: ${{ secrets.LICI_PASS }}
+        run: |
+          python -m agents.lici.run --cola queues/postulaciones.csv --status STATUS.md || true
       - name: Meta / Marketplace
         env:
           META_PAGE_ACCESS_TOKEN: ${{ secrets.META_PAGE_ACCESS_TOKEN }}
@@ -51,6 +86,10 @@ jobs:
           LINKEDIN_ACCESS_TOKEN: ${{ secrets.LINKEDIN_ACCESS_TOKEN }}
         run: |
           python -m agents.linkedin.run --status STATUS.md || true
+      - name: Sanitize status report
+        if: always()
+        run: |
+          python scripts/preflight.py --status STATUS.md
       - name: Artifacts
         if: always()
         uses: actions/upload-artifact@v4

@@ -5,3 +5,4 @@ token.json
 # artefactos
 artifacts/
 logs/
+__pycache__/

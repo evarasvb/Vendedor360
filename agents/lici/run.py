@@ -1,16 +1,18 @@
-import os
-import sys
-import time
+import argparse
 import csv
 import logging
+import os
+import time
 from datetime import datetime
 from pathlib import Path
+from typing import Dict, List
+
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
-sys.path.append(str(Path(__file__).resolve().parent.parent / "common"))
-from queue import load_postulaciones_queue
-from status import actualizar_status
+
+from agents.common.queue import read_queue_csv
+from agents.common.status import append_status, write_json_log
 
 # === CONFIGURACIÓN DE ENTORNO/SECRETOS
 LICI_USER = os.environ.get("LICI_USER")
@@ -110,32 +112,101 @@ def guardar_csv(fila):
             writer.writerow(["fecha", "empresa", "codigo", "match", "ofertado", "presupuesto", "estado", "link"])
         writer.writerow(fila)
 
-def run(cola=None, status_md="STATUS.md"):
-    driver = setup_driver()
-    login_lici(driver)
-    for empresa in EMPRESAS:
-        cambiar_empresa(driver, empresa)
-        ofertas = obtener_ofertas(driver)
-        for o in ofertas:
-            realizado = ""
-            # 100% match
-            if o['match'] == 100:
-                if o['ofertado'] >= o['presupuesto'] * 0.95:
-                    ajustar_oferta(driver, o, o['presupuesto'] * 0.95)
-                    realizado = "ajustada"
-                enviar_oferta(driver, o)
-                realizado += " enviada"
-            # Repite lógica para 1 y 2 faltantes si puedes identificarlo en el parser
-            guardar_csv([
-                now_fmt(), empresa, o['codigo'], o['match'], o['ofertado'], o['presupuesto'], f"{o['estado']} ({realizado.strip()})", o['link']
-            ])
-            actualizar_status(status_md, empresa, o['codigo'], o['estado'], now_fmt())
-    driver.quit()
+def normalize_empresa(nombre: str) -> str:
+    return nombre.strip().lower().replace(" ", "")
 
-if __name__ == "__main__":
-    import argparse
+
+def load_objetivos(cola: str | None) -> Dict[str, Dict[str, float]]:
+    if not cola or not Path(cola).exists():
+        return {}
+
+    objetivos: Dict[str, Dict[str, float]] = {}
+    for row in read_queue_csv(cola):
+        empresa = row.get("empresa") or ""
+        if not empresa:
+            continue
+        key = normalize_empresa(empresa)
+        meta = objetivos.setdefault(key, {"match_min": 100.0, "precio_max": 0.0})
+        try:
+            match_min = float(row.get("match_min") or 100)
+            meta["match_min"] = max(meta["match_min"], match_min)
+        except ValueError:
+            pass
+        try:
+            precio = float(row.get("precio_max") or 0)
+            meta["precio_max"] = max(meta["precio_max"], precio)
+        except ValueError:
+            pass
+    return objetivos
+
+
+def run(cola: str | None = None, status_md: str = "STATUS.md") -> None:
+    objetivos = load_objetivos(cola)
+    resultados: List[dict] = []
+
+    driver = setup_driver()
+    try:
+        login_lici(driver)
+        for empresa in EMPRESAS:
+            normalized = normalize_empresa(empresa)
+            if objetivos and normalized not in objetivos:
+                logging.info("Saltando %s por no estar en la cola priorizada", empresa)
+                continue
+
+            meta = objetivos.get(normalized, {"match_min": 100.0, "precio_max": 0.0})
+            cambiar_empresa(driver, empresa)
+            ofertas = obtener_ofertas(driver)
+            for o in ofertas:
+                realizado: List[str] = []
+                estado_final = o["estado"]
+
+                if o["match"] >= meta.get("match_min", 100):
+                    if meta.get("precio_max", 0) and o["presupuesto"] > meta["precio_max"]:
+                        estado_final = f"omitida (presupuesto>{meta['precio_max']})"
+                    else:
+                        if o["ofertado"] >= o["presupuesto"] * 0.95:
+                            ajustar_oferta(driver, o, o["presupuesto"] * 0.95)
+                            realizado.append("ajustada")
+                        enviar_oferta(driver, o)
+                        realizado.append("enviada")
+                        estado_final = "procesada"
+
+                guardar_csv([
+                    now_fmt(),
+                    empresa,
+                    o["codigo"],
+                    o["match"],
+                    o["ofertado"],
+                    o["presupuesto"],
+                    estado_final,
+                    o["link"],
+                ])
+                resultados.append(
+                    {
+                        "empresa": empresa,
+                        "codigo": o["codigo"],
+                        "match": o["match"],
+                        "estado": estado_final,
+                        "acciones": ",".join(realizado) if realizado else "",
+                        "link": o["link"],
+                    }
+                )
+    finally:
+        driver.quit()
+
+    append_status(status_md, "Lici", resultados)
+    write_json_log("logs/lici.json", resultados)
+
+
+def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--cola", type=str, default=None)
     parser.add_argument("--status", type=str, default="STATUS.md")
     args = parser.parse_args()
+
     run(cola=args.cola, status_md=args.status)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

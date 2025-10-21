@@ -7,10 +7,11 @@
 ## Entradas (Inputs)  
 - **Inventario**: Google Sheets dinámico (con disparadores de stock).  
   - Ej: si stock <10% → activar Oferta Flash.  
-- **Plataformas Sociales**:  
-  - Meta Business Suite (FB/IG).  
-  - WhatsApp Business API.  
-  - Expansión automática a TikTok, LinkedIn y Email Marketing.  
+- **Plataformas Sociales y Portales de Compras**:
+  - Meta Business Suite (FB/IG).
+  - WhatsApp Business API.
+  - Expansión automática a TikTok, LinkedIn y Email Marketing.
+  - Portales de licitaciones (Wherex, Senegocia, Mercado Público, **Lici**).
 - **Fuentes de IA**:  
   - ChatGPT/Gemini → copies, análisis predictivo, análisis de sentimiento.  
   - MidJourney/Stable Diffusion (fallback en Canva API) → creatividades visuales.  
@@ -68,10 +69,16 @@
   - MidJourney → Stable Diffusion → Canva API.  
 - **Gestión de Marca y Voz**: garantizar coherencia en todos los canales.  
 - **Adaptabilidad a Plataformas**: si cambian algoritmos, probar nuevos hashtags o formatos.  
-- **Gestión de Crisis/Reputación**:  
-  - Análisis de sentimiento en tiempo real.  
-  - Respuesta empática automática.  
-  - Escalar a humano si el riesgo >7/10.  
+- **Gestión de Crisis/Reputación**:
+  - Análisis de sentimiento en tiempo real.
+  - Respuesta empática automática.
+  - Escalar a humano si el riesgo >7/10.
+
+### Módulo continuo de Licitaciones (Lici)
+- **Sincronización de inventario y colas**: integra la cola `queues/postulaciones.csv` para priorizar las oportunidades más alineadas con el portafolio.
+- **Autologin seguro**: utiliza los secretos `LICI_USER` y `LICI_PASS` para recorrer el panel multiempresa sin exponer credenciales.
+- **Evaluación inteligente de ofertas**: detecta coincidencias de 100%, ajusta montos para mejorar competitividad y dispara el envío cuando el calce presupuesto/producto es óptimo.
+- **Registro de evidencia**: exporta resultados en `artifacts/lici_*.csv` y escribe actualizaciones en `STATUS.md` para auditar cada postulación.
 
 ## Factores Críticos de Éxito  
 1. **Operación Multicanal Inteligente**: presencia en FB, IG, WhatsApp, con expansión a TikTok, LinkedIn y Email.  
