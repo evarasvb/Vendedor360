@@ -36,3 +36,21 @@ Se actualiza automáticamente en cada ejecución del orquestador.
 ## Credenciales MercadoLibre
 - Usuario: hola@tiendaid.cl
 - Contraseña: Firmavb#2024
+## Mercado Público
+- Fecha: 2025-10-26T13:47:50.350940
+- estado:skip, motivo:faltan_credenciales
+## Meta/Marketplace
+- Fecha: 2025-10-26T13:47:50.419110
+- estado:skip, motivo:faltan_tokens
+## LinkedIn
+- Fecha: 2025-10-26T13:47:50.473806
+- estado:skip, motivo:falta_token
+
+## Latest Automation Run - Sun Oct 26 13:47:50 UTC 2025
+### LICI Agent Status
+LICI automation executed successfully
+2025-10-26 13:47:18,268 | ERROR | Fallo grave en el ciclo: 'NoneType' object has no attribute 'get'
+
+### Test Results
+## Test Results
+/opt/hostedtoolcache/Python/3.11.13/x64/bin/python: No module named pytest
