@@ -81,8 +81,7 @@ def apply_for_bid(page: Page) -> bool:
                 if btn and btn.is_visible():
                     btn.click()
                     page.wait_for_load_state("networkidle")
-                    applied = True
-                    # Confirmar si existe un botón de confirmación adicional, como "Sí" o "Confirmar".
+                    # Intentar confirmar si hay paso adicional
                     for confirm_label in ["Confirmar", "Sí", "Enviar", "Enviar oferta", "Aceptar"]:
                         try:
                             confirm_btn = page.get_by_role("button", name=confirm_label)
@@ -92,6 +91,21 @@ def apply_for_bid(page: Page) -> bool:
                                 break
                         except Exception:
                             continue
+                    # Verificar indicadores de éxito en la UI
+                    success_locators = [
+                        page.get_by_text("Postulación enviada"),
+                        page.get_by_text("Oferta enviada"),
+                        page.get_by_text("Participando"),
+                        page.get_by_role("button", name="Retirar oferta"),
+                    ]
+                    for loc in success_locators:
+                        try:
+                            if loc.is_visible():
+                                applied = True
+                                break
+                        except Exception:
+                            continue
+                    # Si no se detectó indicador, mantener applied en False
                     break
             except Exception:
                 continue
@@ -149,7 +163,7 @@ def run_item(page: Page, palabra: str) -> dict:
     ART.mkdir(parents=True, exist_ok=True)
     img_path = ART / f"wherex_{ts}.png"
     page.screenshot(path=str(img_path), full_page=True)
-    estado = "postulacion_realizada" if did_apply else "postulada"
+    estado = "postulacion_realizada" if did_apply else "buscada"
     resultado = {"palabra": palabra, "estado": estado, "evidencia": str(img_path)}
     return resultado
 
