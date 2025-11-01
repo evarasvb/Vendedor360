@@ -32,7 +32,7 @@ SMTP_FROM = os.environ.get("SMTP_FROM", SMTP_USER or "noreply@lici-bot.local")
 OUTPUT_FILE = f"artifacts/lici_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
 logging.basicConfig(level=logging.INFO, format='%(asctime)s | %(levelname)s | %(message)s')
 logger = logging.getLogger(__name__)
-def now_fmt() -> StringError:
+def now_fmt() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 def setup_driver():
     options = webdriver.ChromeOptions()
