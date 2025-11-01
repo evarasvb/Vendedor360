@@ -5,10 +5,8 @@ on:
   workflow_dispatch:
   push:
     branches: [ main ]
-
 permissions:
   contents: write
-
 jobs:
   vendedor360:
     runs-on: ubuntu-latest
@@ -52,8 +50,9 @@ jobs:
         env:
           WHEREX_USER: ${{ secrets.WHEREX_USER }}
           WHEREX_PASS: ${{ secrets.WHEREX_PASS }}
+          WHEREX_KEYWORDS: ${{ secrets.WHEREX_KEYWORDS }}
         run: |
-          python -m agents.wherex.run --cola queues/postulaciones.csv --status STATUS.md || true
+          python -m agents.wherex.run --status STATUS.md || true
       
       - name: Senegocia
         env:
@@ -61,4 +60,3 @@ jobs:
           SENEGOCIA_PASS: ${{ secrets.SENEGOCIA_PASS }}
         run: |
           python -m agents.senegocia.run --cola queues/postulaciones.csv --status STATUS.md || true
-      
