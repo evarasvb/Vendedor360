@@ -5,12 +5,19 @@ from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 from agents.common.queue import read_queue_csv
 from agents.common.filters import load_exclusions, contains_exclusion
 from agents.common.status import append_status, write_json_log
-
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("senegocia")
-ART = paartifacts/senegocia")
+ART = pathlib.Path("artifacts/senegocia")
 BASE = pathlib.Path(__file__).resolve().parent.parent
 EXCLUS = load_exclusions(BASE)
+
+def get_keywords_from_env():
+    """Read keywords from SENEGOCIA_KEYWORDS environment variable (comma-separated)."""
+    env_keywords = os.getenv("SENEGOCIA_KEYWORDS")
+    if not env_keywords:
+        return None
+    keywords = [kw.strip() for kw in env_keywords.split(",") if kw.strip()]
+    return [{"palabra": kw} for kw in keywords]
 
 def need_env() -> bool:
     return os.getenv("SENEGOCIA_USER") and os.getenv("SENEGOCIA_PASS")
@@ -37,20 +44,31 @@ def run_item(page, palabra: str) -> dict:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--cola", required=True)
+    ap.add_argument("--cola", required=False, default=None)
     ap.add_argument("--status", default="STATUS.md")
     args = ap.parse_args()
-
+    
     if not need_env():
         append_status(args.status, "Senegocia", [{"estado": "skip", "motivo": "faltan_credenciales"}])
         return 0
-
+    
+    # Determine source of keywords
+    keywords_from_env = get_keywords_from_env()
+    if keywords_from_env:
+        queue = keywords_from_env
+    elif args.cola:
+        queue = read_queue_csv(args.cola)
+    else:
+        log.error("Error: either SENEGOCIA_KEYWORDS environment variable or --cola parameter must be provided")
+        append_status(args.status, "Senegocia", [{"estado": "error", "motivo": "no_keywords_source"}])
+        return 1
+    
     resultados = []
     with sync_playwright() as pw:
         browser = pw.chromium.launch(headless=True)
         page = browser.new_page()
         login(page, os.getenv("SENEGOCIA_USER"), os.getenv("SENEGOCIA_PASS"))
-        for it in read_queue_csv(args.cola):
+        for it in queue:
             palabra = (it.get("palabra") or "").strip()
             if not palabra:
                 continue
@@ -63,7 +81,7 @@ def main() -> int:
             resultados.append(r)
         browser.close()
     append_status(args.status, "Senegocia", resultados)
-    write_json_log("logs/senegocia.json", resultados)
+    write_json_log(ART / "result.json", resultados)
     return 0
 
 if __name__ == "__main__":
