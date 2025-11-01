@@ -14,9 +14,16 @@ BASE = pathlib.Path(__file__).resolve().parent.parent; EXCLUS = load_exclusions(
 def need_env():
     return os.getenv("WHEREX_USER") and os.getenv("WHEREX_PASS")
 
+def get_keywords_from_env():
+    """Read keywords from WHEREX_KEYWORDS environment variable (comma-separated)"""
+    env_keywords = os.getenv("WHEREX_KEYWORDS")
+    if env_keywords:
+        keywords = [k.strip() for k in env_keywords.split(",") if k.strip()]
+        return [{"palabra": k} for k in keywords]
+    return None
+
 def login(page, user, pwd):
-    page.goto("https://login.wherex.com", wait_until
-              ="domcontentloaded")
+    page.goto("https://login.wherex.com", wait_until="domcontentloaded")
     page.get_by_label("Correo").fill(user)
     page.get_by_label("Contraseña").fill(pwd)
     page.get_by_role("button", name="Ingresar").click()
@@ -45,19 +52,27 @@ def run_item(page, palabra: str) -> dict:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--cola", required=True)
+    ap.add_argument("--cola", required=False, default=None)
     ap.add_argument("--status", default="STATUS.md")
     args = ap.parse_args()
-
     if not need_env():
         append_status(args.status, "Wherex", [{"estado": "error", "motivo": "faltan_credenciales"}])
         
         return 1
-
-
-    queue = read_queue_csv(args.cola)
+    
+    # Use keywords from environment variable if set, otherwise use CSV file
+    queue = get_keywords_from_env()
+    if queue is not None:
+        log.info("Using keywords from WHEREX_KEYWORDS environment variable")
+    elif args.cola:
+        queue = read_queue_csv(args.cola)
+        log.info(f"Using keywords from CSV file: {args.cola}")
+    else:
+        append_status(args.status, "Wherex", [{"estado": "error", "motivo": "no_keywords_source"}])
+        log.error("No keywords source provided: set WHEREX_KEYWORDS env var or provide --cola argument")
+        return 1
+    
     resultados = []
-
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
@@ -69,17 +84,14 @@ def main():
                     res = run_item(page, palabra)
                 except PWTimeout:
                     log.exception("timeout")
-                    res = {"palabra": palabra, "estado": "error", "motivo": "timeout"}
- 
+                    res = {"palabra": palabra, "estado": "error", "motivo": "timeout"} 
                 except Exception as e:
-
                     log.exception("error")
                     res = {"palabra": palabra, "estado": "error", "motivo": str(e)}
                 resultados.append(res)
         finally:
             page.close()
             browser.close()
-
     append_status(args.status, "Wherex", resultados)
     write_json_log(LOGS / "wherex.json", resultados)
     return 0
