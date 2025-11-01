@@ -24,8 +24,38 @@ def get_keywords_from_env():
 
 def login(page, user, pwd):
     page.goto("https://login.wherex.com", wait_until="domcontentloaded")
-    page.get_by_label("Correo").fill(user)
-    page.get_by_label("Contraseña").fill(pwd)
+    page.wait_for_timeout(2000)  # Add longer wait time
+    
+    # Try multiple selectors for email field with fallbacks
+    try:
+        page.get_by_label("Email").fill(user)
+    except:
+        try:
+            page.get_by_label("Correo").fill(user)
+        except:
+            try:
+                page.get_by_placeholder("Email").fill(user)
+            except:
+                try:
+                    page.get_by_placeholder("Correo").fill(user)
+                except:
+                    page.locator('input[type="email"]').first.fill(user)
+    
+    # Try multiple selectors for password field with fallbacks
+    try:
+        page.get_by_label("Password").fill(pwd)
+    except:
+        try:
+            page.get_by_label("Contraseña").fill(pwd)
+        except:
+            try:
+                page.get_by_placeholder("Password").fill(pwd)
+            except:
+                try:
+                    page.get_by_placeholder("Contraseña").fill(pwd)
+                except:
+                    page.locator('input[type="password"]').first.fill(pwd)
+    
     page.get_by_role("button", name="Ingresar").click()
     page.wait_for_load_state("networkidle")
 
