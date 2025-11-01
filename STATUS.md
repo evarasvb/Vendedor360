@@ -776,3 +776,41 @@ test_data_source.py::TestDataSource::test_fetch_without_credentials PASSED [ 92%
 test_data_source.py::TestDataSource::test_sheet_name_default PASSED      [100%]
 
 ============================== 13 passed in 9.56s ==============================
+## Mercado Público
+- Fecha: 2025-11-01T11:03:01.613675
+- estado:skip, motivo:faltan_credenciales
+## Meta/Marketplace
+- Fecha: 2025-11-01T11:03:01.676324
+- estado:skip, motivo:faltan_tokens
+## LinkedIn
+- Fecha: 2025-11-01T11:03:01.729392
+- estado:skip, motivo:falta_token
+
+## Latest Automation Run - Sat Nov  1 11:03:01 UTC 2025
+### LICI Agent Status
+LICI automation executed successfully
+2025-11-01 11:02:29,877 | ERROR | Fallo grave en el ciclo: 'NoneType' object has no attribute 'get'
+
+### Test Results
+## Test Results
+============================= test session starts ==============================
+platform linux -- Python 3.11.14, pytest-8.4.2, pluggy-1.6.0 -- /opt/hostedtoolcache/Python/3.11.14/x64/bin/python
+cachedir: .pytest_cache
+rootdir: /home/runner/work/Vendedor360/Vendedor360
+collecting ... collected 13 items
+
+test_lici_agent.py::TestLiciAgent::test_cambiar_empresa PASSED           [  7%]
+test_lici_agent.py::TestLiciAgent::test_conectar_gsheet PASSED           [ 15%]
+test_lici_agent.py::TestLiciAgent::test_empresas_list PASSED             [ 23%]
+test_lici_agent.py::TestLiciAgent::test_guardar_sheet PASSED             [ 30%]
+test_lici_agent.py::TestLiciAgent::test_login_lici PASSED                [ 38%]
+test_lici_agent.py::TestLiciAgent::test_now_fmt PASSED                   [ 46%]
+test_lici_agent.py::TestLiciAgent::test_obtener_ofertas PASSED           [ 53%]
+test_lici_agent.py::TestLiciAgent::test_setup_driver PASSED              [ 61%]
+test_data_source.py::TestDataSource::test_fetch_empty_sheet PASSED       [ 69%]
+test_data_source.py::TestDataSource::test_fetch_multiple_tabs PASSED     [ 76%]
+test_data_source.py::TestDataSource::test_fetch_with_valid_credentials PASSED [ 84%]
+test_data_source.py::TestDataSource::test_fetch_without_credentials PASSED [ 92%]
+test_data_source.py::TestDataSource::test_sheet_name_default PASSED      [100%]
+
+============================== 13 passed in 9.53s ==============================
