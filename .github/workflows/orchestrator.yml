@@ -5,8 +5,10 @@ on:
   workflow_dispatch:
   push:
     branches: [ main ]
+
 permissions:
   contents: write
+
 jobs:
   vendedor360:
     runs-on: ubuntu-latest
@@ -37,7 +39,6 @@ jobs:
         env:
           LICI_USER: ${{ secrets.LICI_USER }}
           LICI_PASS: ${{ secrets.LICI_PASS }}
-          GOOGLE_APPLICATION_CREDENTIALS_JSON: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_JSON }}
           LICI_SHEET_NAME: ${{ secrets.LICI_SHEET_NAME }}
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
@@ -61,61 +62,3 @@ jobs:
         run: |
           python -m agents.senegocia.run --cola queues/postulaciones.csv --status STATUS.md || true
       
-      - name: Mercado Público
-        env:
-          MP_SESSION_COOKIE: ${{ secrets.MP_SESSION_COOKIE }}
-          MP_TICKET: ${{ secrets.MP_TICKET }}
-        run: |
-          python -m agents.mp.run --cola queues/postulaciones.csv --status STATUS.md || true
-      
-      - name: Meta / Marketplace
-        env:
-          META_PAGE_ACCESS_TOKEN: ${{ secrets.META_PAGE_ACCESS_TOKEN }}
-          META_PAGE_ID: ${{ secrets.META_PAGE_ID }}
-        run: |
-          python -m agents.meta.run --catalogo queues/publicaciones.csv --status STATUS.md || true
-      
-      - name: LinkedIn
-        env:
-          LINKEDIN_ACCESS_TOKEN: ${{ secrets.LINKEDIN_ACCESS_TOKEN }}
-        run: |
-          python -m agents.linkedin.run --status STATUS.md || true
-      
-      - name: Update STATUS.md
-        run: |
-          echo "" >> STATUS.md
-          echo "## Latest Automation Run - $(date)" >> STATUS.md
-          echo "### LICI Agent Status" >> STATUS.md
-          if [ -f lici_agent.log ]; then
-            echo "LICI automation executed successfully" >> STATUS.md
-            tail -n 20 lici_agent.log >> STATUS.md
-          else
-            echo "No LICI log file found" >> STATUS.md
-          fi
-          echo "" >> STATUS.md
-          echo "### Test Results" >> STATUS.md
-          if [ -f test_results.md ]; then
-            cat test_results.md >> STATUS.md
-          fi
-      
-      - name: Commit STATUS.md changes
-        run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git add STATUS.md || true
-          git commit -m "Auto-update STATUS.md with automation results [skip ci]" || true
-          git push || true
-      
-      - name: Upload Artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: vendedor360-artifacts
-          path: |
-            artifacts/*
-            logs/*
-            STATUS.md
-            test_results.md
-            test_output.txt
-            lici_agent.log
-            lici_execution.log
