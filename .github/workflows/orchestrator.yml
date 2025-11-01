@@ -5,8 +5,10 @@ on:
   workflow_dispatch:
   push:
     branches: [ main ]
+
 permissions:
   contents: write
+
 jobs:
   vendedor360:
     runs-on: ubuntu-latest
@@ -58,5 +60,6 @@ jobs:
         env:
           SENEGOCIA_USER: ${{ secrets.SENEGOCIA_USER }}
           SENEGOCIA_PASS: ${{ secrets.SENEGOCIA_PASS }}
+          SENEGOCIA_KEYWORDS: ${{ secrets.SENEGOCIA_KEYWORDS }}
         run: |
-          python -m agents.senegocia.run --cola queues/postulaciones.csv --status STATUS.md || true
+          python -m agents.senegocia.run --status STATUS.md || true
