@@ -1,15 +1,12 @@
 name: Vendedor360 Orchestrator (hourly)
-
 on:
   schedule:
     - cron: '0 * * * *'
   workflow_dispatch:
   push:
     branches: [ main ]
-
 permissions:
   contents: write
-
 jobs:
   vendedor360:
     runs-on: ubuntu-latest
@@ -42,9 +39,12 @@ jobs:
           LICI_PASS: ${{ secrets.LICI_PASS }}
           GOOGLE_APPLICATION_CREDENTIALS_JSON: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_JSON }}
           LICI_SHEET_NAME: ${{ secrets.LICI_SHEET_NAME }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
         run: |
           echo "Running LICI automation..."
-          python lici_agent.py || echo "LICI automation completed with warnings"
+          python agents/lici/run.py || echo "LICI automation completed with warnings"
           echo "LICI automation executed on $(date)" >> lici_execution.log
       
       - name: Wherex
