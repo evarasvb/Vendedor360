@@ -7,54 +7,41 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
-
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
-
 # Add common utilities to path
 sys.path.append(str(Path(__file__).resolve().parent.parent / "common"))
 # from queue import load_postulaciones_queue  # noqa: E402
 # from status import actualizar_status  # noqa: E402
-
 # ======================
 # Configuración & Secretos
 # ======================
-
 LICI_USER = os.environ.get("LICI_USER")
 LICI_PASS = os.environ.get("LICI_PASS")
-
 # Multi-empresa: soporta lista por ENV o usa defaults
 EMPRESAS = [
     s.strip()
     for s in os.environ.get("LICI_EMPRESAS", "FirmaVB Mobiliario,FirmaVB Aseo,FirmaVB Alimentos,FirmaVB Oficina,FirmaVB Electrodomésticos,FirmaVB Ferretería").split(",")
     if s.strip()
 ]
-
 # Notificaciones por correo (reservado para futuras extensiones)
 NOTIFY_EMAILS = [
     s.strip()
     for s in os.environ.get("LICI_NOTIFY_EMAILS", "").split(",")
     if s.strip()
 ]
-
 SMTP_HOST = os.environ.get("SMTP_HOST")
 SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
 SMTP_USER = os.environ.get("SMTP_USER")
 SMTP_PASS = os.environ.get("SMTP_PASS")
 SMTP_FROM = os.environ.get("SMTP_FROM", SMTP_USER or "noreply@lici-bot.local")
-
 OUTPUT_FILE = f"artifacts/lici_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-
 logging.basicConfig(level=logging.INFO, format='%(asctime)s | %(levelname)s | %(message)s')
 logger = logging.getLogger(__name__)
-
-
 def now_fmt() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-
 def setup_driver():
     options = webdriver.ChromeOptions()
     options.add_argument("--headless=new")
@@ -62,8 +49,6 @@ def setup_driver():
     options.add_argument('--disable-dev-shm-usage')
     options.add_argument('--window-size=1400,1000')
     return webdriver.Chrome(options=options)
-
-
 def login_lici(driver):
     """
     Realiza login en LICI.CL.
@@ -71,28 +56,22 @@ def login_lici(driver):
     logger.info("Iniciando login en LICI...")
     driver.get("https://www.lici.cl/login")
     time.sleep(3)
-
     try:
         # Ingresar usuario
         user_input = driver.find_element(By.ID, 'email')
         user_input.clear()
         user_input.send_keys(LICI_USER)
-
         # Ingresar contraseña
         pass_input = driver.find_element(By.ID, 'password')
         pass_input.clear()
         pass_input.send_keys(LICI_PASS)
-
         # Submit
         pass_input.send_keys(Keys.RETURN)
         time.sleep(5)
         logger.info("Login completado.")
-
     except NoSuchElementException as e:
         logger.error(f"Error en login: elemento no encontrado. {e}")
         raise
-
-
 @dataclass
 class Oferta:
     nombre: str
@@ -101,19 +80,16 @@ class Oferta:
     apertura: str
     monto: str
     link: str
-
-
 def buscar_licitaciones(driver, empresa: str, page_limit: int = 5) -> List[Oferta]:
     """
     Busca licitaciones para una empresa en LICI.CL.
+    Extrae 'Ofertas Automáticas' usando selectores robustos basados en XPath.
     """
     logger.info(f"Buscando licitaciones para '{empresa}'...")
     ofertas = []
-
     # Navegar al buscador de licitaciones
     driver.get("https://www.lici.cl/licitaciones")
     time.sleep(3)
-
     try:
         # Buscar por empresa
         search_box = driver.find_element(By.ID, "search-input")
@@ -121,32 +97,58 @@ def buscar_licitaciones(driver, empresa: str, page_limit: int = 5) -> List[Ofert
         search_box.send_keys(empresa)
         search_box.send_keys(Keys.RETURN)
         time.sleep(3)
-
         # Recorrer las páginas de resultados
         for page_num in range(1, page_limit + 1):
             logger.info(f"Procesando página {page_num} para '{empresa}'...")
             
-            # Extraer ofertas de la página actual
-            ofertas_elementos = driver.find_elements(By.CLASS_NAME, "oferta-card")
-            for elem in ofertas_elementos:
+            # Extraer ofertas de la página actual usando XPath robusto
+            # Selector: //main//div[contains(.,'Presupuesto') and contains(.,'Ofertado')]
+            cards = driver.find_elements(By.XPATH, "//main//div[contains(.,'Presupuesto') and contains(.,'Ofertado')]")
+            
+            for card in cards:
                 try:
-                    nombre = elem.find_element(By.CLASS_NAME, "oferta-nombre").text
-                    publicacion = elem.find_element(By.CLASS_NAME, "oferta-publicacion").text
-                    apertura = elem.find_element(By.CLASS_NAME, "oferta-apertura").text
-                    monto = elem.find_element(By.CLASS_NAME, "oferta-monto").text
-                    link = elem.find_element(By.TAG_NAME, "a").get_attribute("href")
-
+                    # Extraer título (asumiendo que está en un elemento con clase o tag específico)
+                    try:
+                        titulo = card.find_element(By.XPATH, ".//h2 | .//h3 | .//*[contains(@class, 'title')] | .//*[contains(@class, 'nombre')]").text
+                    except NoSuchElementException:
+                        titulo = "N/A"
+                    
+                    # Extraer presupuesto
+                    try:
+                        presupuesto = card.find_element(By.XPATH, ".//*[contains(text(), 'Presupuesto')]/following-sibling::* | .//*[contains(text(), 'Presupuesto')]/parent::*//*[not(contains(text(), 'Presupuesto'))]").text
+                    except NoSuchElementException:
+                        presupuesto = "N/A"
+                    
+                    # Extraer ofertado
+                    try:
+                        ofertado = card.find_element(By.XPATH, ".//*[contains(text(), 'Ofertado')]/following-sibling::* | .//*[contains(text(), 'Ofertado')]/parent::*//*[not(contains(text(), 'Ofertado'))]").text
+                    except NoSuchElementException:
+                        ofertado = "N/A"
+                    
+                    # Extraer fecha de cierre
+                    try:
+                        fecha_cierre = card.find_element(By.XPATH, ".//*[contains(text(), 'Cierre') or contains(text(), 'cierre') or contains(text(), 'Fecha')]/following-sibling::* | .//*[contains(@class, 'fecha')] | .//*[contains(@class, 'date')]").text
+                    except NoSuchElementException:
+                        fecha_cierre = "N/A"
+                    
+                    # Extraer link
+                    try:
+                        link = card.find_element(By.XPATH, ".//a").get_attribute("href")
+                    except NoSuchElementException:
+                        link = "N/A"
+                    
                     ofertas.append(Oferta(
-                        nombre=nombre,
+                        nombre=titulo,
                         empresa=empresa,
-                        publicacion=publicacion,
-                        apertura=apertura,
-                        monto=monto,
+                        publicacion=presupuesto,
+                        apertura=fecha_cierre,
+                        monto=ofertado,
                         link=link
                     ))
-                except NoSuchElementException:
+                except Exception as e:
+                    logger.warning(f"Error procesando card: {e}")
                     continue
-
+            
             # Intentar navegar a la siguiente página
             try:
                 next_button = driver.find_element(By.CLASS_NAME, "next-page")
@@ -156,14 +158,10 @@ def buscar_licitaciones(driver, empresa: str, page_limit: int = 5) -> List[Ofert
                 time.sleep(3)
             except NoSuchElementException:
                 break
-
     except Exception as e:
         logger.error(f"Error al buscar licitaciones para '{empresa}': {e}")
-
     logger.info(f"Se encontraron {len(ofertas)} ofertas para '{empresa}'.")
     return ofertas
-
-
 def run():
     """
     Función principal que ejecuta el flujo completo.
@@ -172,13 +170,10 @@ def run():
     try:
         logger.info(f"=== Inicio de LICI Automation ===")
         logger.info(f"Empresas a procesar: {EMPRESAS}")
-
         # Setup del driver
         driver = setup_driver()
-
         # Login
         login_lici(driver)
-
         # Buscar licitaciones para cada empresa
         results = []
         for empresa in EMPRESAS:
@@ -192,7 +187,6 @@ def run():
                     "Monto": oferta.monto,
                     "Link": oferta.link,
                 })
-
         # Guardar resultados en CSV
         if results:
             Path("artifacts").mkdir(parents=True, exist_ok=True)
@@ -219,8 +213,6 @@ def run():
         if driver:
             driver.quit()
             logger.info("Driver cerrado.")
-
-
 def send_email(message: str):
     """
     Envía notificaciones por correo electrónico.
@@ -259,7 +251,5 @@ def send_email(message: str):
         
     except Exception as e:
         logger.error(f"Failed to send email: {e}")
-
-
 if __name__ == '__main__':
     sys.exit(run())
