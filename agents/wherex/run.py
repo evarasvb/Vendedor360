@@ -5,7 +5,6 @@ from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 from agents.common.queue import read_queue_csv
 from agents.common.filters import load_exclusions, contains_exclusion
 from agents.common.status import append_status, write_json_log
-
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("wherex")
 ART = pathlib.Path("artifacts/wherex"); LOGS = pathlib.Path("logs")
@@ -24,107 +23,90 @@ def get_keywords_from_env():
 
 def login(page, user, pwd):
     page.goto("https://login.wherex.com", wait_until="domcontentloaded")
-    page.wait_for_timeout(2000)  # Add longer wait time
-    
-    # Try multiple selectors for email field with fallbacks
-    try:
-        page.get_by_label("Email").fill(user)
-    except:
-        try:
-            page.get_by_label("Correo").fill(user)
-        except:
-            try:
-                page.get_by_placeholder("Email").fill(user)
-            except:
-                try:
-                    page.get_by_placeholder("Correo").fill(user)
-                except:
-                    page.locator('input[type="email"]').first.fill(user)
-    
-    # Try multiple selectors for password field with fallbacks
-    try:
-        page.get_by_label("Password").fill(pwd)
-    except:
-        try:
-            page.get_by_label("Contraseña").fill(pwd)
-        except:
-            try:
-                page.get_by_placeholder("Password").fill(pwd)
-            except:
-                try:
-                    page.get_by_placeholder("Contraseña").fill(pwd)
-                except:
-                    page.locator('input[type="password"]').first.fill(pwd)
-    
-    page.get_by_role("button", name="Ingresar").click()
+    page.wait_for_timeout(2000)
+    page.locator('input[type="email"]').first.fill(user)
+    page.locator('input[type="password"]').first.fill(pwd)
+    page.keyboard.press('Enter')
     page.wait_for_load_state("networkidle")
 
 def run_item(page, palabra: str) -> dict:
     if contains_exclusion(palabra, EXCLUS):
         return {"palabra": palabra, "estado": "omitido", "motivo": "exclusion_logo"}
-    page.goto("https://proveedores.wherex.com/licitaciones", wait_until="domcontentloaded")
-    page.get_by_placeholder("Buscar").fill(palabra)
-    page.keyboard.press("Enter")
-    page.wait_for_timeout(1500)
-    cards = page.locator(".card-licitacion").all()
-    if not cards:
-        return {"palabra": palabra, "estado": "sin_resultados"}
-    titulo = (cards[0].text_content() or "").lower()
-    if contains_exclusion(titulo, EXCLUS):
-        return {"palabra": palabra, "estado": "omitido", "motivo": "exclusion_logo_titulo"}
-    cards[0].click()
-    page.wait_for_load_state("networkidle")
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    ART.mkdir(parents=True, exist_ok=True)
-    img = ART / f"wherex_{ts}.png"
-    page.screenshot(path=str(img), full_page=True)
-    return {"palabra": palabra, "estado": "postulada", "evidencia": str(img)}
+    try:
+        log.info(f"Searching '{palabra}'...")
+        search_page = f"https://www.wherex.com/search?q={palabra}"
+        page.goto(search_page, wait_until="domcontentloaded")
+        page.wait_for_timeout(3000)
+        # Wait for results container
+        results_present = False
+        try:
+            page.wait_for_selector("div[class*='result'], article, .search-results", timeout=10000)
+            results_present = True
+        except PWTimeout:
+            log.warning(f"No results container found for '{palabra}'")
+            return {"palabra": palabra, "estado": "error", "motivo": "no_results"}
+        if not results_present:
+            return {"palabra": palabra, "estado": "error", "motivo": "no_results"}
+        # Take screenshots
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        ss_name = f"{ts}_{palabra.replace(' ','_')}.png"
+        ss_path = ART / ss_name
+        page.screenshot(path=str(ss_path), full_page=True)
+        log.info(f"Screenshot saved: {ss_path}")
+        return {"palabra": palabra, "estado": "ok", "screenshot": str(ss_path)}
+    except Exception as e:
+        log.error(f"Error with '{palabra}': {e}")
+        return {"palabra": palabra, "estado": "error", "motivo": str(e)}
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--cola", required=False, default=None)
-    ap.add_argument("--status", default="STATUS.md")
-    args = ap.parse_args()
+    parser = argparse.ArgumentParser(description="WhereX agent")
+    parser.add_argument("--queue", help="Path to CSV queue file")
+    parser.add_argument("--keywords", help="Comma-separated list of keywords")
+    args = parser.parse_args()
     if not need_env():
-        append_status(args.status, "Wherex", [{"estado": "error", "motivo": "faltan_credenciales"}])
-        
-        return 1
-    
-    # Use keywords from environment variable if set, otherwise use CSV file
-    queue = get_keywords_from_env()
-    if queue is not None:
-        log.info("Using keywords from WHEREX_KEYWORDS environment variable")
-    elif args.cola:
-        queue = read_queue_csv(args.cola)
-        log.info(f"Using keywords from CSV file: {args.cola}")
+        log.error("Missing WHEREX_USER or WHEREX_PASS environment variables")
+        sys.exit(1)
+    user = os.getenv("WHEREX_USER")
+    pwd = os.getenv("WHEREX_PASS")
+    # Determine keyword source
+    if args.keywords:
+        items = [{"palabra": k.strip()} for k in args.keywords.split(",") if k.strip()]
+    elif args.queue:
+        items = read_queue_csv(args.queue)
     else:
-        append_status(args.status, "Wherex", [{"estado": "error", "motivo": "no_keywords_source"}])
-        log.error("No keywords source provided: set WHEREX_KEYWORDS env var or provide --cola argument")
-        return 1
-    
-    resultados = []
+        items = get_keywords_from_env()
+        if not items:
+            log.error("No keywords provided via --keywords, --queue, or WHEREX_KEYWORDS env")
+            sys.exit(1)
+    if not items:
+        log.error("No valid keywords to process")
+        sys.exit(1)
+    ART.mkdir(parents=True, exist_ok=True)
+    LOGS.mkdir(parents=True, exist_ok=True)
+    results = []
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
+        context = browser.new_context()
+        page = context.new_page()
         try:
-            login(page, os.environ["WHEREX_USER"], os.environ["WHEREX_PASS"])
-            for item in queue:
-                palabra = item.get("palabra") or ""
-                try:
-                    res = run_item(page, palabra)
-                except PWTimeout:
-                    log.exception("timeout")
-                    res = {"palabra": palabra, "estado": "error", "motivo": "timeout"} 
-                except Exception as e:
-                    log.exception("error")
-                    res = {"palabra": palabra, "estado": "error", "motivo": str(e)}
-                resultados.append(res)
-        finally:
-            page.close()
+            login(page, user, pwd)
+            log.info("Login successful")
+        except Exception as e:
+            log.error(f"Login failed: {e}")
             browser.close()
-    append_status(args.status, "Wherex", resultados)
-    write_json_log(LOGS / "wherex.json", resultados)
-    return 0
+            sys.exit(1)
+        for item in items:
+            palabra = item.get("palabra", "").strip()
+            if not palabra:
+                continue
+            result = run_item(page, palabra)
+            results.append(result)
+            append_status("wherex", result)
+        browser.close()
+    log.info(f"Processed {len(results)} keywords")
+    log_path = LOGS / f"wherex_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    write_json_log(log_path, results)
+    log.info(f"Log written to {log_path}")
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()
