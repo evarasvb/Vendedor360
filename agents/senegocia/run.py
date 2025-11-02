@@ -23,7 +23,7 @@ def need_env() -> bool:
     return os.getenv("SENEGOCIA_USER") and os.getenv("SENEGOCIA_PASS")
 
 def login(page, user, pwd) -> None:
-    page.goto("https://proveedores.senegocia.com/login", wait_until="domcontentloaded")
+    page.goto("https://portal.senegocia.com", wait_until="domcontentloaded")
     page.get_by_label("Usuario").fill(user)
     page.get_by_label("Contraseña").fill(pwd)
     page.get_by_role("button", name="Ingresar").click()
@@ -47,11 +47,11 @@ def main() -> int:
     ap.add_argument("--cola", required=False, default=None)
     ap.add_argument("--status", default="STATUS.md")
     args = ap.parse_args()
-    
+
     if not need_env():
         append_status(args.status, "Senegocia", [{"estado": "skip", "motivo": "faltan_credenciales"}])
         return 0
-    
+
     # Determine source of keywords
     keywords_from_env = get_keywords_from_env()
     if keywords_from_env:
@@ -62,27 +62,3 @@ def main() -> int:
         log.error("Error: either SENEGOCIA_KEYWORDS environment variable or --cola parameter must be provided")
         append_status(args.status, "Senegocia", [{"estado": "error", "motivo": "no_keywords_source"}])
         return 1
-    
-    resultados = []
-    with sync_playwright() as pw:
-        browser = pw.chromium.launch(headless=True)
-        page = browser.new_page()
-        login(page, os.getenv("SENEGOCIA_USER"), os.getenv("SENEGOCIA_PASS"))
-        for it in queue:
-            palabra = (it.get("palabra") or "").strip()
-            if not palabra:
-                continue
-            try:
-                r = run_item(page, palabra)
-            except PWTimeout:
-                r = {"palabra": palabra, "estado": "error", "motivo": "timeout"}
-            except Exception as e:  # pylint: disable=broad-except
-                r = {"palabra": palabra, "estado": "error", "motivo": str(e)}
-            resultados.append(r)
-        browser.close()
-    append_status(args.status, "Senegocia", resultados)
-    write_json_log(ART / "result.json", resultados)
-    return 0
-
-if __name__ == "__main__":
-    sys.exit(main())
