@@ -9,10 +9,8 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 log = logging.getLogger("wherex")
 ART = pathlib.Path("artifacts/wherex"); LOGS = pathlib.Path("logs")
 BASE = pathlib.Path(__file__).resolve().parent.parent; EXCLUS = load_exclusions(BASE)
-
 def need_env():
     return os.getenv("WHEREX_USER") and os.getenv("WHEREX_PASS")
-
 def get_keywords_from_env():
     """Read keywords from WHEREX_KEYWORDS environment variable (comma-separated)"""
     env_keywords = os.getenv("WHEREX_KEYWORDS")
@@ -20,7 +18,6 @@ def get_keywords_from_env():
         keywords = [k.strip() for k in env_keywords.split(",") if k.strip()]
         return [{"palabra": k} for k in keywords]
     return None
-
 def login(page, user, pwd):
     page.goto("https://login.wherex.com", wait_until="domcontentloaded")
     page.wait_for_timeout(2000)
@@ -28,7 +25,6 @@ def login(page, user, pwd):
     page.locator('input[type="password"]').first.fill(pwd)
     page.keyboard.press('Enter')
     page.wait_for_load_state("networkidle")
-
 def run_item(page, palabra: str) -> dict:
     if contains_exclusion(palabra, EXCLUS):
         return {"palabra": palabra, "estado": "omitido", "motivo": "exclusion_logo"}
@@ -57,11 +53,11 @@ def run_item(page, palabra: str) -> dict:
     except Exception as e:
         log.error(f"Error with '{palabra}': {e}")
         return {"palabra": palabra, "estado": "error", "motivo": str(e)}
-
 def main():
     parser = argparse.ArgumentParser(description="WhereX agent")
     parser.add_argument("--queue", help="Path to CSV queue file")
     parser.add_argument("--keywords", help="Comma-separated list of keywords")
+    parser.add_argument('--status', help='Path to STATUS.md file for status updates')
     args = parser.parse_args()
     if not need_env():
         log.error("Missing WHEREX_USER or WHEREX_PASS environment variables")
@@ -101,12 +97,14 @@ def main():
                 continue
             result = run_item(page, palabra)
             results.append(result)
-            append_status("wherex", result)
+            if args.status:
+                append_status("wherex", result, status_file=args.status)
+            else:
+                append_status("wherex", result)
         browser.close()
     log.info(f"Processed {len(results)} keywords")
     log_path = LOGS / f"wherex_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
     write_json_log(log_path, results)
     log.info(f"Log written to {log_path}")
-
 if __name__ == "__main__":
     main()
