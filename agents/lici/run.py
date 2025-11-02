@@ -15,13 +15,13 @@ from selenium.common.exceptions import NoSuchElementException, TimeoutException
 
 # Add common utilities to path
 sys.path.append(str(Path(__file__).resolve().parent.parent / "common"))
-
 # from queue import load_postulaciones_queue  # noqa: E402
 # from status import actualizar_status  # noqa: E402
 
 # ======================
 # Configuración & Secretos
 # ======================
+
 LICI_USER = os.environ.get("LICI_USER")
 LICI_PASS = os.environ.get("LICI_PASS")
 
@@ -50,8 +50,10 @@ OUTPUT_FILE = f"artifacts/lici_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
 logging.basicConfig(level=logging.INFO, format='%(asctime)s | %(levelname)s | %(message)s')
 logger = logging.getLogger(__name__)
 
+
 def now_fmt() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
 
 def setup_driver():
     options = webdriver.ChromeOptions()
@@ -61,53 +63,139 @@ def setup_driver():
     options.add_argument('--window-size=1400,1000')
     return webdriver.Chrome(options=options)
 
+
 def login_lici(driver):
     """
-    Inicia sesión en LICI usando las credenciales del entorno.
+    Realiza login en LICI.CL.
     """
     logger.info("Iniciando login en LICI...")
-    driver.get('https://lici.cl/login')
-    time.sleep(2)
+    driver.get("https://www.lici.cl/login")
+    time.sleep(3)
+
     try:
-        user_input = driver.find_element(By.ID, "username")
-        pass_input = driver.find_element(By.ID, "password")
+        # Ingresar usuario
+        user_input = driver.find_element(By.ID, 'email')
+        user_input.clear()
         user_input.send_keys(LICI_USER)
+
+        # Ingresar contraseña
+        pass_input = driver.find_element(By.ID, 'password')
+        pass_input.clear()
         pass_input.send_keys(LICI_PASS)
+
+        # Submit
         pass_input.send_keys(Keys.RETURN)
-        time.sleep(3)
+        time.sleep(5)
         logger.info("Login completado.")
+
     except NoSuchElementException as e:
-        logger.error(f"No se encontraron los campos de login: {e}")
+        logger.error(f"Error en login: elemento no encontrado. {e}")
         raise
+
+
+@dataclass
+class Oferta:
+    nombre: str
+    empresa: str
+    publicacion: str
+    apertura: str
+    monto: str
+    link: str
+
+
+def buscar_licitaciones(driver, empresa: str, page_limit: int = 5) -> List[Oferta]:
+    """
+    Busca licitaciones para una empresa en LICI.CL.
+    """
+    logger.info(f"Buscando licitaciones para '{empresa}'...")
+    ofertas = []
+
+    # Navegar al buscador de licitaciones
+    driver.get("https://www.lici.cl/licitaciones")
+    time.sleep(3)
+
+    try:
+        # Buscar por empresa
+        search_box = driver.find_element(By.ID, "search-input")
+        search_box.clear()
+        search_box.send_keys(empresa)
+        search_box.send_keys(Keys.RETURN)
+        time.sleep(3)
+
+        # Recorrer las páginas de resultados
+        for page_num in range(1, page_limit + 1):
+            logger.info(f"Procesando página {page_num} para '{empresa}'...")
+            
+            # Extraer ofertas de la página actual
+            ofertas_elementos = driver.find_elements(By.CLASS_NAME, "oferta-card")
+            for elem in ofertas_elementos:
+                try:
+                    nombre = elem.find_element(By.CLASS_NAME, "oferta-nombre").text
+                    publicacion = elem.find_element(By.CLASS_NAME, "oferta-publicacion").text
+                    apertura = elem.find_element(By.CLASS_NAME, "oferta-apertura").text
+                    monto = elem.find_element(By.CLASS_NAME, "oferta-monto").text
+                    link = elem.find_element(By.TAG_NAME, "a").get_attribute("href")
+
+                    ofertas.append(Oferta(
+                        nombre=nombre,
+                        empresa=empresa,
+                        publicacion=publicacion,
+                        apertura=apertura,
+                        monto=monto,
+                        link=link
+                    ))
+                except NoSuchElementException:
+                    continue
+
+            # Intentar navegar a la siguiente página
+            try:
+                next_button = driver.find_element(By.CLASS_NAME, "next-page")
+                if "disabled" in next_button.get_attribute("class"):
+                    break
+                next_button.click()
+                time.sleep(3)
+            except NoSuchElementException:
+                break
+
+    except Exception as e:
+        logger.error(f"Error al buscar licitaciones para '{empresa}': {e}")
+
+    logger.info(f"Se encontraron {len(ofertas)} ofertas para '{empresa}'.")
+    return ofertas
+
 
 def run():
     """
-    Función principal: itera sobre empresas y ofertas, extrayendo datos de LICI.
+    Función principal que ejecuta el flujo completo.
     """
-    logger.info("=== Iniciando LICI Automation ===")
     driver = None
-    
     try:
+        logger.info(f"=== Inicio de LICI Automation ===")
+        logger.info(f"Empresas a procesar: {EMPRESAS}")
+
+        # Setup del driver
         driver = setup_driver()
+
+        # Login
         login_lici(driver)
-        
+
+        # Buscar licitaciones para cada empresa
         results = []
-        
-        # Iterar sobre cada empresa configurada
         for empresa in EMPRESAS:
-            logger.info(f"Procesando empresa: {empresa}")
-            
-            # Aquí iría la lógica para navegar y extraer ofertas
-            # Por ahora, simplemente logging
-            time.sleep(1)
-            
-            # Ejemplo: extraer ofertas para esta empresa
-            # ofertas = extract_ofertas(driver, empresa)
-            # results.extend(ofertas)
-        
+            ofertas = buscar_licitaciones(driver, empresa)
+            for oferta in ofertas:
+                results.append({
+                    "Nombre": oferta.nombre,
+                    "Empresa": oferta.empresa,
+                    "Publicación": oferta.publicacion,
+                    "Apertura": oferta.apertura,
+                    "Monto": oferta.monto,
+                    "Link": oferta.link,
+                })
+
         # Guardar resultados en CSV
         if results:
-            Path("artifacts").mkdir(exist_ok=True)
+            Path("artifacts").mkdir(parents=True, exist_ok=True)
             with open(OUTPUT_FILE, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.DictWriter(f, fieldnames=results[0].keys())
                 writer.writeheader()
@@ -131,6 +219,7 @@ def run():
         if driver:
             driver.quit()
             logger.info("Driver cerrado.")
+
 
 def send_email(message: str):
     """
@@ -170,6 +259,7 @@ def send_email(message: str):
         
     except Exception as e:
         logger.error(f"Failed to send email: {e}")
+
 
 if __name__ == '__main__':
     sys.exit(run())
