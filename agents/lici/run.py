@@ -6,7 +6,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
@@ -14,45 +14,131 @@ from selenium.common.exceptions import NoSuchElementException, TimeoutException
 
 # Add common utilities to path
 sys.path.append(str(Path(__file__).resolve().parent.parent / "common"))
-
 # from queue import load_postulaciones_queue  # noqa: E402
 # from status import actualizar_status  # noqa: E402
+
+# === Reglas de ajuste automático de oferta (añadidas) ===
+import re
+from decimal import Decimal, ROUND_HALF_UP
+
+def limpiar_monto(texto: str) -> Optional[Decimal]:
+    """Normaliza montos como "$ 1.234.567,89" a Decimal("1234567.89").
+    Devuelve None si no hay monto válido.
+    """
+    if not texto:
+        return None
+    s = str(texto).strip()
+    # Reemplazos comunes CLP: quitar símbolo, espacios, puntos de miles y convertir coma decimal
+    s = s.replace("$", "").replace("CLP", "").replace("cop", "").replace("COP", "")
+    s = re.sub(r"\s+", "", s)
+    s = s.replace(".", "").replace(",", ".")
+    try:
+        return Decimal(s)
+    except Exception:
+        return None
+
+def calcular_match_percentage(texto_requerimiento: str, texto_oferta: str) -> int:
+    """Porcentaje simple de match basado en términos compartidos.
+    Heurística: intersección de tokens / tokens requeridos.
+    """
+    if not texto_requerimiento:
+        return 0
+    req_tokens = {t for t in re.findall(r"[\wáéíóúñÁÉÍÓÚÑ]+", texto_requerimiento.lower()) if len(t) > 2}
+    if not req_tokens:
+        return 0
+    oferta_tokens = {t for t in re.findall(r"[\wáéíóúñÁÉÍÓÚÑ]+", (texto_oferta or "").lower()) if len(t) > 2}
+    inter = req_tokens & oferta_tokens
+    pct = int(round(100 * len(inter) / max(1, len(req_tokens))))
+    return max(0, min(100, pct))
+
+def debe_ajustar_oferta(presupuesto: Optional[Decimal], ofertado: Optional[Decimal], match_pct: int) -> Tuple[bool, Optional[Decimal], str]:
+    """Reglas:
+    - Si presupuesto y ofertado existen y ofertado > presupuesto, intentar bajar.
+      • Con match >= 80, bajar a 98% del presupuesto.
+      • Con match 60-79, bajar a 99% del presupuesto.
+      • Con match < 60, no ajustar automáticamente.
+    - Si ofertado <= presupuesto, no ajustar.
+    Retorna (debe_ajustar, nuevo_valor, razon_log).
+    """
+    if presupuesto is None or ofertado is None:
+        return (False, None, "Montos insuficientes para ajuste")
+    if ofertado <= presupuesto:
+        return (False, None, "Oferta actual no supera el presupuesto")
+    if match_pct >= 80:
+        nuevo = (presupuesto * Decimal("0.98")).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        return (True, nuevo, f"Match {match_pct}%: ajustar a 98% del presupuesto")
+    if 60 <= match_pct < 80:
+        nuevo = (presupuesto * Decimal("0.99")).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        return (True, nuevo, f"Match {match_pct}%: ajustar a 99% del presupuesto")
+    return (False, None, f"Match {match_pct}% insuficiente para ajuste automático")
+
+def enviar_oferta_ajustada(driver, link_licitacion: str, nuevo_monto: Decimal) -> bool:
+    """Navega a la licitación y trata de actualizar/enviar la oferta con nuevo_monto.
+    Esta función es específica del sitio y puede requerir ajustes de selectores.
+    Devuelve True si aparenta éxito.
+    """
+    try:
+        driver.get(link_licitacion)
+        time.sleep(2)
+        # Ejemplo de selectores; podrían cambiar según el DOM real de LICI
+        try:
+            btn_editar = driver.find_element(By.CSS_SELECTOR, "button.edit-offer, a.edit-offer")
+            btn_editar.click()
+            time.sleep(1)
+        except NoSuchElementException:
+            # Si no hay botón editar, intentar ir directamente al formulario
+            pass
+        # Campo monto
+        input_monto = driver.find_element(By.CSS_SELECTOR, "input[name='monto']")
+        input_monto.clear()
+        input_monto.send_keys(str(int(nuevo_monto)))
+        # Enviar
+        try:
+            btn_enviar = driver.find_element(By.CSS_SELECTOR, "button.submit-offer, button[type='submit']")
+        except NoSuchElementException:
+            btn_enviar = driver.find_element(By.XPATH, "//button[contains(., 'Enviar') or contains(., 'Guardar')]")
+        btn_enviar.click()
+        time.sleep(2)
+        # Verificar algún toast/mensaje de éxito
+        try:
+            msg = driver.find_element(By.CSS_SELECTOR, ".toast-success, .alert-success").text
+            logging.info(f"LICI | Confirmación de envío: {msg}")
+        except NoSuchElementException:
+            pass
+        return True
+    except Exception as e:
+        logging.error(f"LICI | Error enviando oferta ajustada: {e}")
+        return False
 
 # ======================
 # Configuración & Secretos
 # ======================
 LICI_USER = os.environ.get("LICI_USER")
 LICI_PASS = os.environ.get("LICI_PASS")
-
 # Multi-empresa: soporta lista por ENV o usa defaults
 EMPRESAS = [
     s.strip()
     for s in os.environ.get("LICI_EMPRESAS", "FirmaVB Aseo,FirmaVB Alimento,FirmaVB Oficina,FirmaVB Mobiliario,FirmaVB Desechable,FirmaVB Electrodomésticos,FirmaVB Ferretería").split(",")
     if s.strip()
 ]
-
 # Notificaciones por correo (reservado para futuras extensiones)
 NOTIFY_EMAILS = [
     s.strip()
     for s in os.environ.get("LICI_NOTIFY_EMAILS", "").split(",")
     if s.strip()
 ]
-
 SMTP_HOST = os.environ.get("SMTP_HOST")
 SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
 SMTP_USER = os.environ.get("SMTP_USER")
 SMTP_PASS = os.environ.get("SMTP_PASS")
 SMTP_FROM = os.environ.get("SMTP_FROM", SMTP_USER or "noreply@lici-bot.local")
-
 OUTPUT_FILE = f"artifacts/lici_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s | %(levelname)s | %(message)s')
 logger = logging.getLogger(__name__)
 
-
 def now_fmt() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
 
 def setup_driver():
     options = webdriver.ChromeOptions()
@@ -61,7 +147,6 @@ def setup_driver():
     options.add_argument('--disable-dev-shm-usage')
     options.add_argument('--window-size=1400,1000')
     return webdriver.Chrome(options=options)
-
 
 def login_lici(driver):
     """
@@ -89,7 +174,6 @@ def login_lici(driver):
         logger.error(f"Error en login: {e}")
         raise
 
-
 @dataclass
 class Licitacion:
     """Estructura de datos para una licitación."""
@@ -101,7 +185,6 @@ class Licitacion:
     estado: str
     monto_estimado: str
     link: str
-
 
 def buscar_licitaciones(driver, empresa: str) -> List[Licitacion]:
     """
@@ -135,6 +218,33 @@ def buscar_licitaciones(driver, empresa: str) -> List[Licitacion]:
                 estado = elem.find_element(By.CLASS_NAME, 'estado').text
                 monto = elem.find_element(By.CLASS_NAME, 'monto').text
                 link = elem.find_element(By.TAG_NAME, 'a').get_attribute('href')
+
+                # === Lógica de ajuste automático por oferta ===
+                # Suponemos que 'monto' es presupuesto referencial. Si existe monto ofertado visible, extraer.
+                presupuesto = limpiar_monto(monto)
+                # Intentar leer posible texto de requerimiento/oferta desde el elemento
+                texto_req = (titulo + " " + (elem.text or "")) if titulo else (elem.text or "")
+                # Si hubiera un campo específico de "oferta actual", podríamos leerlo. Fallback: None
+                ofertado_actual = None
+                try:
+                    ofertado_txt = elem.find_element(By.CSS_SELECTOR, ".oferta-actual, .monto-ofertado").text
+                    ofertado_actual = limpiar_monto(ofertado_txt)
+                except NoSuchElementException:
+                    ofertado_actual = None
+
+                match_pct = calcular_match_percentage(texto_req, titulo)
+                debe, nuevo_valor, razon = debe_ajustar_oferta(presupuesto, ofertado_actual, match_pct)
+                logger.info(f"LICI | {codigo} | match={match_pct}% | presupuesto={presupuesto} | ofertado={ofertado_actual} | regla='{razon}'")
+
+                if debe and nuevo_valor is not None:
+                    logger.warning(f"LICI | {codigo} | Ajustando oferta automática a {nuevo_valor} (antes: {ofertado_actual})")
+                    ok = enviar_oferta_ajustada(driver, link, nuevo_valor)
+                    if ok:
+                        logger.info(f"LICI | {codigo} | Oferta ajustada y enviada con éxito a {nuevo_valor}")
+                    else:
+                        logger.error(f"LICI | {codigo} | Falló envío de oferta ajustada a {nuevo_valor}")
+                else:
+                    logger.info(f"LICI | {codigo} | No se ajusta oferta automática")
                 
                 licitacion = Licitacion(
                     codigo=codigo,
@@ -239,7 +349,6 @@ def main():
     logger.info("=" * 60)
     logger.info("Agente LICI finalizado")
     logger.info("=" * 60)
-
 
 if __name__ == "__main__":
     main()
