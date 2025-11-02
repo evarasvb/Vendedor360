@@ -5,8 +5,10 @@ on:
   workflow_dispatch:
   push:
     branches: [ main ]
+
 permissions:
   contents: write
+
 jobs:
   vendedor360:
     runs-on: ubuntu-latest
@@ -69,4 +71,4 @@ jobs:
           META_USER: ${{ secrets.META_USER }}
           META_PASS: ${{ secrets.META_PASS }}
         run: |
-          python -m agents.meta.run --status STATUS.md || true
+          python -m agents.meta.run --status || true
