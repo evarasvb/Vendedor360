@@ -11,12 +11,10 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
-
 # Add common utilities to path
 sys.path.append(str(Path(__file__).resolve().parent.parent / "common"))
 # from queue import load_postulaciones_queue  # noqa: E402
 # from status import actualizar_status  # noqa: E402
-
 # === Reglas de ajuste automático de oferta (añadidas) ===
 import re
 from decimal import Decimal, ROUND_HALF_UP
@@ -51,26 +49,37 @@ def calcular_match_percentage(texto_requerimiento: str, texto_oferta: str) -> in
     pct = int(round(100 * len(inter) / max(1, len(req_tokens))))
     return max(0, min(100, pct))
 
-def debe_ajustar_oferta(presupuesto: Optional[Decimal], ofertado: Optional[Decimal], match_pct: int) -> Tuple[bool, Optional[Decimal], str]:
-    """Reglas:
-    - Si presupuesto y ofertado existen y ofertado > presupuesto, intentar bajar.
-      • Con match >= 80, bajar a 98% del presupuesto.
-      • Con match 60-79, bajar a 99% del presupuesto.
-      • Con match < 60, no ajustar automáticamente.
-    - Si ofertado <= presupuesto, no ajustar.
-    Retorna (debe_ajustar, nuevo_valor, razon_log).
+def debe_ajustar_oferta_95(presupuesto: Optional[Decimal], ofertado: Optional[Decimal], match_pct: int) -> Tuple[bool, Optional[Decimal], str]:
+    """Reglas 95% solicitadas:
+    - 70-100% match y oferta >120% presupuesto → ajustar a 95% presupuesto
+    - 100% match y diferencia >=50% (oferta >=150% presupuesto o presupuesto >=150% oferta) → 95%
+    - 100% match y oferta <90% presupuesto → 95%
+    Devuelve (debe_ajustar, nuevo_valor, razón)
     """
     if presupuesto is None or ofertado is None:
         return (False, None, "Montos insuficientes para ajuste")
-    if ofertado <= presupuesto:
-        return (False, None, "Oferta actual no supera el presupuesto")
-    if match_pct >= 80:
-        nuevo = (presupuesto * Decimal("0.98")).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
-        return (True, nuevo, f"Match {match_pct}%: ajustar a 98% del presupuesto")
-    if 60 <= match_pct < 80:
-        nuevo = (presupuesto * Decimal("0.99")).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
-        return (True, nuevo, f"Match {match_pct}%: ajustar a 99% del presupuesto")
-    return (False, None, f"Match {match_pct}% insuficiente para ajuste automático")
+    if presupuesto <= 0:
+        return (False, None, "Presupuesto inválido")
+
+    razon = None
+    nuevo = (presupuesto * Decimal("0.95")).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+
+    # Regla 1: 70-100% y oferta >120% presupuesto
+    if match_pct >= 70 and ofertado > presupuesto * Decimal("1.20"):
+        razon = f"Match {match_pct}% y ofertado {ofertado} >120% presupuesto {presupuesto}"
+        return (True, nuevo, razon)
+
+    # Regla 2: 100% y diferencia >=50%
+    if match_pct == 100 and (ofertado >= presupuesto * Decimal("1.50") or presupuesto >= ofertado * Decimal("1.50")):
+        razon = "Match 100% y diferencia >=50%"
+        return (True, nuevo, razon)
+
+    # Regla 3: 100% y oferta <90% presupuesto
+    if match_pct == 100 and ofertado < presupuesto * Decimal("0.90"):
+        razon = "Match 100% y oferta <90% presupuesto"
+        return (True, nuevo, razon)
+
+    return (False, None, f"No cumple reglas 95% (match={match_pct}%)")
 
 def enviar_oferta_ajustada(driver, link_licitacion: str, nuevo_monto: Decimal) -> bool:
     """Navega a la licitación y trata de actualizar/enviar la oferta con nuevo_monto.
@@ -140,6 +149,7 @@ logger = logging.getLogger(__name__)
 def now_fmt() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+
 def setup_driver():
     options = webdriver.ChromeOptions()
     options.add_argument("--headless=new")
@@ -148,6 +158,7 @@ def setup_driver():
     options.add_argument('--window-size=1400,1000')
     return webdriver.Chrome(options=options)
 
+
 def login_lici(driver):
     """
     Realiza login en LICI.CL.
@@ -155,116 +166,120 @@ def login_lici(driver):
     logger.info("Iniciando login en LICI...")
     driver.get("https://www.lici.cl/login")
     time.sleep(3)
-    
+
     try:
         # Ingresar usuario
         user_input = driver.find_element(By.ID, 'email')
         user_input.clear()
         user_input.send_keys(LICI_USER)
-        
+
         # Ingresar contraseña
         pass_input = driver.find_element(By.ID, 'password')
         pass_input.clear()
         pass_input.send_keys(LICI_PASS)
         pass_input.send_keys(Keys.RETURN)
         time.sleep(3)
-        
+
         logger.info('Login successful')
     except Exception as e:
         logger.error(f"Error en login: {e}")
         raise
 
+
 @dataclass
 class Licitacion:
-    """Estructura de datos para una licitación."""
+    """Estructura de datos para una licitación/autobid existente."""
     codigo: str
     titulo: str
-    organismo: str
-    fecha_publicacion: str
+    presupuesto: str
+    ofertado: str
+    match_pct: str
+    items: str
+    fecha_creacion: str
     fecha_cierre: str
-    estado: str
-    monto_estimado: str
     link: str
+
 
 def buscar_licitaciones(driver, empresa: str) -> List[Licitacion]:
     """
-    Busca licitaciones en LICI para una empresa específica.
+    Lee auto_bids existentes generados por Lisa desde https://lici.cl/auto_bids
+    y aplica reglas de ajuste 95% cuando corresponda.
     """
-    logger.info(f"Buscando licitaciones para: {empresa}")
-    resultados = []
-    
+    logger.info(f"Leyendo auto_bids para: {empresa}")
+    resultados: List[Licitacion] = []
+
     try:
-        # Navegar a búsqueda
-        driver.get("https://www.lici.cl/licitaciones")
-        time.sleep(2)
-        
-        # Buscar por empresa
-        search_box = driver.find_element(By.ID, 'search')
-        search_box.clear()
-        search_box.send_keys(empresa)
-        search_box.send_keys(Keys.RETURN)
+        driver.get("https://lici.cl/auto_bids")
         time.sleep(3)
-        
-        # Extraer resultados
-        licitaciones_elements = driver.find_elements(By.CLASS_NAME, 'licitacion-item')
-        
-        for elem in licitaciones_elements:
+
+        # Filtro por empresa si existe un buscador/selector
+        try:
+            search = driver.find_element(By.CSS_SELECTOR, "input[name='empresa'], input#empresa, input[placeholder*='Empresa']")
+            search.clear()
+            search.send_keys(empresa)
+            search.send_keys(Keys.RETURN)
+            time.sleep(2)
+        except NoSuchElementException:
+            pass
+
+        # Cada autobid en una fila/tarjeta
+        items = driver.find_elements(By.CSS_SELECTOR, ".auto-bid-row, .autobid-item, tr.autobid, .auto-bid-card")
+        if not items:
+            # fallback genérico: filas de tabla en /auto_bids
+            items = driver.find_elements(By.CSS_SELECTOR, "table tr")
+
+        for el in items:
             try:
-                codigo = elem.find_element(By.CLASS_NAME, 'codigo').text
-                titulo = elem.find_element(By.CLASS_NAME, 'titulo').text
-                organismo = elem.find_element(By.CLASS_NAME, 'organismo').text
-                fecha_pub = elem.find_element(By.CLASS_NAME, 'fecha-publicacion').text
-                fecha_cierre = elem.find_element(By.CLASS_NAME, 'fecha-cierre').text
-                estado = elem.find_element(By.CLASS_NAME, 'estado').text
-                monto = elem.find_element(By.CLASS_NAME, 'monto').text
-                link = elem.find_element(By.TAG_NAME, 'a').get_attribute('href')
+                # Campos con selectores tolerantes
+                codigo = el.get_attribute("data-id") or el.find_element(By.CSS_SELECTOR, ".id, .codigo, td.id").text
+                titulo = el.find_element(By.CSS_SELECTOR, ".title, .titulo, td.titulo").text
+                presupuesto_txt = el.find_element(By.CSS_SELECTOR, ".budget, .presupuesto, td.presupuesto").text
+                ofertado_txt = el.find_element(By.CSS_SELECTOR, ".offered, .ofertado, td.ofertado").text
+                match_txt = el.find_element(By.CSS_SELECTOR, ".match, .coincidencia, td.match").text
+                items_txt = el.find_element(By.CSS_SELECTOR, ".items, .productos, td.items").text
+                creacion_txt = el.find_element(By.CSS_SELECTOR, ".created, .creacion, td.creacion, .created-at").text
+                cierre_txt = el.find_element(By.CSS_SELECTOR, ".closing, .cierre, td.cierre, .close-at").text
+                link = el.find_element(By.CSS_SELECTOR, "a[href*='licitacion'], a.details, a").get_attribute("href")
 
-                # === Lógica de ajuste automático por oferta ===
-                # Suponemos que 'monto' es presupuesto referencial. Si existe monto ofertado visible, extraer.
-                presupuesto = limpiar_monto(monto)
-                # Intentar leer posible texto de requerimiento/oferta desde el elemento
-                texto_req = (titulo + " " + (elem.text or "")) if titulo else (elem.text or "")
-                # Si hubiera un campo específico de "oferta actual", podríamos leerlo. Fallback: None
-                ofertado_actual = None
-                try:
-                    ofertado_txt = elem.find_element(By.CSS_SELECTOR, ".oferta-actual, .monto-ofertado").text
-                    ofertado_actual = limpiar_monto(ofertado_txt)
-                except NoSuchElementException:
-                    ofertado_actual = None
+                presupuesto = limpiar_monto(presupuesto_txt)
+                ofertado = limpiar_monto(ofertado_txt)
+                # match en numero
+                m = re.search(r"(\d{1,3})\s*%", match_txt or "")
+                match_pct = int(m.group(1)) if m else calcular_match_percentage(titulo, titulo)
 
-                match_pct = calcular_match_percentage(texto_req, titulo)
-                debe, nuevo_valor, razon = debe_ajustar_oferta(presupuesto, ofertado_actual, match_pct)
-                logger.info(f"LICI | {codigo} | match={match_pct}% | presupuesto={presupuesto} | ofertado={ofertado_actual} | regla='{razon}'")
-
-                if debe and nuevo_valor is not None:
-                    logger.warning(f"LICI | {codigo} | Ajustando oferta automática a {nuevo_valor} (antes: {ofertado_actual})")
+                debe, nuevo_valor, razon = debe_ajustar_oferta_95(presupuesto, ofertado, match_pct)
+                logger.info(f"AUTO_BID | {codigo} | match={match_pct}% | presupuesto={presupuesto} | ofertado={ofertado} | regla='{razon}'")
+                if debe and nuevo_valor is not None and link:
+                    logger.warning(f"AUTO_BID | {codigo} | Ajustando oferta a {nuevo_valor} (antes: {ofertado})")
                     ok = enviar_oferta_ajustada(driver, link, nuevo_valor)
                     if ok:
-                        logger.info(f"LICI | {codigo} | Oferta ajustada y enviada con éxito a {nuevo_valor}")
+                        logger.info(f"AUTO_BID | {codigo} | Oferta ajustada y enviada con éxito a {nuevo_valor}")
                     else:
-                        logger.error(f"LICI | {codigo} | Falló envío de oferta ajustada a {nuevo_valor}")
+                        logger.error(f"AUTO_BID | {codigo} | Falló envío de oferta ajustada a {nuevo_valor}")
                 else:
-                    logger.info(f"LICI | {codigo} | No se ajusta oferta automática")
-                
-                licitacion = Licitacion(
-                    codigo=codigo,
-                    titulo=titulo,
-                    organismo=organismo,
-                    fecha_publicacion=fecha_pub,
-                    fecha_cierre=fecha_cierre,
-                    estado=estado,
-                    monto_estimado=monto,
-                    link=link
+                    logger.info(f"AUTO_BID | {codigo} | No se ajusta oferta (o sin link)")
+
+                resultados.append(
+                    Licitacion(
+                        codigo=str(codigo),
+                        titulo=titulo,
+                        presupuesto=presupuesto_txt,
+                        ofertado=ofertado_txt,
+                        match_pct=f"{match_pct}%",
+                        items=items_txt,
+                        fecha_creacion=creacion_txt,
+                        fecha_cierre=cierre_txt,
+                        link=link or ""
+                    )
                 )
-                resultados.append(licitacion)
-                logger.info(f"  Encontrada: {codigo} - {titulo}")
-            except NoSuchElementException as e:
-                logger.warning(f"Error extrayendo elemento: {e}")
+            except NoSuchElementException:
                 continue
-                
+            except Exception as e:
+                logger.warning(f"Error leyendo autobid: {e}")
+                continue
     except Exception as e:
-        logger.error(f"Error en búsqueda para {empresa}: {e}")
-    
+        logger.error(f"Error en lectura auto_bids para {empresa}: {e}")
+
     return resultados
 
 
@@ -273,35 +288,37 @@ def guardar_resultados(licitaciones: List[Licitacion], output_file: str):
     Guarda los resultados en un archivo CSV.
     """
     logger.info(f"Guardando {len(licitaciones)} resultados en {output_file}")
-    
+
     # Crear directorio si no existe
     Path(output_file).parent.mkdir(parents=True, exist_ok=True)
-    
+
     with open(output_file, 'w', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
         writer.writerow([
-            'Código',
+            'ID',
             'Título',
-            'Organismo',
-            'Fecha Publicación',
+            'Presupuesto',
+            'Ofertado',
+            'Match %',
+            'Ítems',
+            'Fecha Creación',
             'Fecha Cierre',
-            'Estado',
-            'Monto Estimado',
             'Link'
         ])
-        
+
         for lic in licitaciones:
             writer.writerow([
                 lic.codigo,
                 lic.titulo,
-                lic.organismo,
-                lic.fecha_publicacion,
+                lic.presupuesto,
+                lic.ofertado,
+                lic.match_pct,
+                lic.items,
+                lic.fecha_creacion,
                 lic.fecha_cierre,
-                lic.estado,
-                lic.monto_estimado,
                 lic.link
             ])
-    
+
     logger.info(f"Resultados guardados exitosamente")
 
 
@@ -314,30 +331,30 @@ def main():
     logger.info(f"Timestamp: {now_fmt()}")
     logger.info(f"Empresas a buscar: {', '.join(EMPRESAS)}")
     logger.info("=" * 60)
-    
+
     driver = None
     todas_licitaciones = []
-    
+
     try:
         # Configurar driver
         driver = setup_driver()
-        
+
         # Login
         login_lici(driver)
-        
+
         # Buscar para cada empresa
         for empresa in EMPRESAS:
             licitaciones = buscar_licitaciones(driver, empresa)
             todas_licitaciones.extend(licitaciones)
             time.sleep(2)  # Pausa entre búsquedas
-        
+
         # Guardar resultados
         if todas_licitaciones:
             guardar_resultados(todas_licitaciones, OUTPUT_FILE)
             logger.info(f"Total de licitaciones encontradas: {len(todas_licitaciones)}")
         else:
             logger.warning("No se encontraron licitaciones")
-        
+
     except Exception as e:
         logger.error(f"Error en ejecución principal: {e}")
         raise
@@ -345,10 +362,11 @@ def main():
         if driver:
             driver.quit()
             logger.info("Driver cerrado")
-    
+
     logger.info("=" * 60)
     logger.info("Agente LICI finalizado")
     logger.info("=" * 60)
 
+
 if __name__ == "__main__":
-    main()
+    main
