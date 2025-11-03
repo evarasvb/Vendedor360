@@ -5,10 +5,8 @@ on:
   workflow_dispatch:
   push:
     branches: [ main ]
-
 permissions:
   contents: write
-
 jobs:
   vendedor360:
     runs-on: ubuntu-latest
@@ -72,3 +70,7 @@ jobs:
           META_PASS: ${{ secrets.META_PASS }}
         run: |
           python -m agents.meta.run --status || true
+      
+      - name: Consolidate Dashboard Data
+        run: |
+          python consolidate_dashboard_data.py
