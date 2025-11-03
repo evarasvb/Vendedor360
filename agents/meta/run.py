@@ -3,9 +3,9 @@
 Meta/Facebook Agent for Vendedor360
 Handles Meta API interactions and validations
 """
-
 import os
 import sys
+import json
 import argparse
 import logging
 import requests
@@ -17,7 +17,6 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
-
 
 class MetaAgent:
     """Meta/Facebook API Agent"""
@@ -63,25 +62,59 @@ class MetaAgent:
                 return False, error_data
                 
         except requests.exceptions.RequestException as e:
-            logger.error(f"Error validating access token: {e}")
-            return False, str(e)
+            logger.error(f"Request exception during token validation: {e}")
+            return False, {'error': str(e)}
+    
+    def save_status_json(self, is_valid, data):
+        """Save status to JSON file in artifacts directory"""
+        try:
+            # Create artifacts directory if it doesn't exist
+            artifacts_dir = 'artifacts'
+            os.makedirs(artifacts_dir, exist_ok=True)
+            
+            # Generate timestamp
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            
+            # Extract user_id from data if validation was successful
+            user_id = data.get('id', None) if is_valid else None
+            
+            # Prepare JSON structure
+            status_json = {
+                'timestamp': timestamp,
+                'api_validated': is_valid,
+                'user_id': user_id,
+                'app_id': self.app_id,
+                'status': 'operational' if is_valid else 'error'
+            }
+            
+            # Save to file
+            filename = f"{artifacts_dir}/meta_{timestamp}.json"
+            with open(filename, 'w') as f:
+                json.dump(status_json, f, indent=2)
+            
+            logger.info(f"Status JSON saved to {filename}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error saving status JSON: {e}")
+            return False
     
     def write_status(self, status_data):
-        """Write status information to STATUS.md"""
+        """Write status report to markdown file"""
         try:
-            status_file = 'STATUS.md'
+            status_file = 'STATUS_META.md'
+            
             with open(status_file, 'w') as f:
-                f.write("# Meta Agent Status\n\n")
-                f.write(f"**Last Updated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
-                f.write(f"**Status:** {status_data.get('status', 'unknown')}\n\n")
+                f.write("# Meta/Facebook Agent Status\n\n")
+                f.write(f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+                f.write(f"**Status:** {status_data.get('status', 'unknown').upper()}\n\n")
                 
                 if status_data.get('api_validated'):
+                    user_data = status_data.get('user_data', {})
                     f.write("## API Validation\n\n")
                     f.write(f"- Access Token: ✓ Valid\n")
-                    if status_data.get('user_data'):
-                        user_data = status_data['user_data']
-                        f.write(f"- User ID: {user_data.get('id', 'N/A')}\n")
-                        f.write(f"- User Name: {user_data.get('name', 'N/A')}\n")
+                    f.write(f"- User ID: {user_data.get('id', 'N/A')}\n")
+                    f.write(f"- User Name: {user_data.get('name', 'N/A')}\n")
                 else:
                     f.write("## API Validation\n\n")
                     f.write(f"- Access Token: ✗ Invalid\n")
@@ -97,7 +130,6 @@ class MetaAgent:
         except Exception as e:
             logger.error(f"Error writing status file: {e}")
             return False
-
 
 def main():
     """Main function"""
@@ -125,6 +157,9 @@ def main():
     # Validate access token with Graph API
     is_valid, data = agent.validate_access_token()
     
+    # Save status to JSON
+    agent.save_status_json(is_valid, data)
+    
     # Prepare status data
     status_data = {
         'status': 'operational' if is_valid else 'error',
@@ -144,7 +179,6 @@ def main():
     
     # Exit with appropriate code
     sys.exit(0 if is_valid else 1)
-
 
 if __name__ == '__main__':
     main()
