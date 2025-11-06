@@ -6,6 +6,9 @@ on:
 jobs:
   connect_dashboard:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -16,18 +19,20 @@ jobs:
           git config user.email "repo-agent@users.noreply.github.com"
 
       - name: Create feature branch
-        run: git checkout -b feat/connect-sheets
+        run: git switch -C feat/connect-sheets
 
       - name: Add data_source.py
-        run: git add app/data_source.py
+        run: git add data_source.py
 
       - name: Commit change
-        run: git commit -m "feat: connect Google Sheets dashboard"
+        run: |
+          git commit -m "feat: connect Google Sheets dashboard" || echo "No changes to commit"
 
       - name: Push branch
-        run: git push -u origin feat/connect-sheets
+        run: git push -u origin feat/connect-sheets --force-with-lease
 
       - name: Create Pull Request
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh pr create --title "Connect dashboard to Sheets" --body "Adds data_source.py and wiring." --base main
+        run: |
+          gh pr create --title "Connect dashboard to Sheets" --body "Adds data_source.py and wiring." --base main --head feat/connect-sheets
