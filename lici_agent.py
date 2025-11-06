@@ -1,10 +1,14 @@
+import json
 import os
 import time
 import logging
 from datetime import datetime
+from pathlib import Path
+
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
+
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
@@ -15,8 +19,6 @@ logging.basicConfig(level=logging.INFO, filename='lici_agent.log',
 # Seguridad de credenciales
 LICI_USER = os.environ.get("LICI_USER")
 LICI_PASS = os.environ.get("LICI_PASS")
-GOOGLE_CREDS_JSON = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS_JSON")
-SHEET_NAME = os.environ.get("LICI_SHEET_NAME", "PostulacionesAutomatizadas")
 
 EMPRESAS = [
     "FirmaVB Mobiliario",
@@ -88,22 +90,71 @@ def enviar_oferta(driver, card):
     # Implementa la navegación para enviar la propuesta
     pass  # Completar con la lógica click "enviar", validar alertas, etc.
 
+def _load_google_credentials() -> ServiceAccountCredentials | None:
+    """Carga credenciales de servicio para acceder a Google Sheets."""
+
+    scope = [
+        'https://spreadsheets.google.com/feeds',
+        'https://www.googleapis.com/auth/drive',
+    ]
+
+    creds_source: str | None = None
+
+    creds_json = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS_JSON")
+    creds_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+
+    if creds_json:
+        creds_source = creds_json
+    elif creds_path:
+        try:
+            creds_source = Path(creds_path).read_text(encoding="utf-8")
+        except FileNotFoundError:
+            logging.error(
+                "No se encontró el archivo indicado por GOOGLE_APPLICATION_CREDENTIALS"
+            )
+            return None
+
+    if not creds_source:
+        logging.warning(
+            "Credenciales de Google Sheets no configuradas; se omitirá el registro en la hoja."
+        )
+        return None
+
+    try:
+        creds_dict = json.loads(creds_source)
+    except json.JSONDecodeError as exc:
+        logging.error(
+            "El contenido de GOOGLE_APPLICATION_CREDENTIALS_JSON no es un JSON válido"
+        )
+        raise ValueError("Credenciales de Google inválidas") from exc
+
+    return ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+
+
 def conectar_gsheet():
     # Requiere un archivo JSON de service account en el entorno
-    scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-    creds_dict = eval(GOOGLE_CREDS_JSON) if GOOGLE_CREDS_JSON else None
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+    creds = _load_google_credentials()
+    if creds is None:
+        return None
+
     client = gspread.authorize(creds)
-    sheet = client.open(SHEET_NAME).sheet1
+    sheet_name = os.environ.get("LICI_SHEET_NAME", "PostulacionesAutomatizadas")
+    sheet = client.open(sheet_name).sheet1
     return sheet
 
 def guardar_sheet(sheet, fila):
+    if sheet is None:
+        logging.debug("Sin Google Sheet configurado; fila omitida: %s", fila)
+        return
+
     sheet.append_row(fila, value_input_option="USER_ENTERED")
 
 def ciclo():
     # Autenticación y setup
     driver = setup_driver()
     gs = conectar_gsheet()
+    if gs is None:
+        logging.warning("Continuando sin registrar postulaciones en Google Sheets")
     login_lici(driver)
     for empresa in EMPRESAS:
         cambiar_empresa(driver, empresa)

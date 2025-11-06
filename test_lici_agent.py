@@ -71,34 +71,47 @@ class TestLiciAgent(unittest.TestCase):
         mock_driver.get.assert_called_with('https://lici.cl/auto_bids')
 
     @patch.dict(os.environ, {
-        'GOOGLE_APPLICATION_CREDENTIALS_JSON': '{"type": "service_account"}',
+        'GOOGLE_APPLICATION_CREDENTIALS_JSON': '{"type": "service_account", "project_id": "demo"}',
         'LICI_SHEET_NAME': 'TestSheet'
-    })
+    }, clear=True)
     @patch('lici_agent.gspread.authorize')
-    def test_conectar_gsheet(self, mock_authorize):
+    @patch('lici_agent.ServiceAccountCredentials.from_json_keyfile_dict')
+    def test_conectar_gsheet(self, mock_from_json, mock_authorize):
         """Test Google Sheets connection"""
+        mock_creds = Mock()
+        mock_from_json.return_value = mock_creds
         mock_client = Mock()
         mock_sheet = Mock()
         mock_client.open.return_value.sheet1 = mock_sheet
         mock_authorize.return_value = mock_client
-        
-        try:
-            sheet = lici_agent.conectar_gsheet()
-            self.assertIsNotNone(sheet)
-        except Exception:
-            pass  # May fail without proper credentials
+
+        sheet = lici_agent.conectar_gsheet()
+
+        mock_from_json.assert_called_once()
+        mock_authorize.assert_called_once_with(mock_creds)
+        self.assertIs(mock_sheet, sheet)
+
+    @patch.dict(os.environ, {}, clear=True)
+    def test_conectar_gsheet_without_credentials(self):
+        """Should return None when credentials are missing"""
+        sheet = lici_agent.conectar_gsheet()
+        self.assertIsNone(sheet)
 
     def test_guardar_sheet(self):
         """Test saving data to Google Sheet"""
         mock_sheet = Mock()
         test_row = ['2025-10-26', 'FirmaVB', 'link', 100, 1000, 950, 'Enviado']
-        
+
         lici_agent.guardar_sheet(mock_sheet, test_row)
-        
+
         mock_sheet.append_row.assert_called_once_with(
-            test_row, 
+            test_row,
             value_input_option='USER_ENTERED'
         )
+
+    def test_guardar_sheet_without_sheet(self):
+        """Should not fail when sheet is None"""
+        lici_agent.guardar_sheet(None, ['fila'])
 
     def test_empresas_list(self):
         """Test that EMPRESAS list is properly defined"""
