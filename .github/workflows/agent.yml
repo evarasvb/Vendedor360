@@ -35,8 +35,4 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh pr create \
-            --title "Connect dashboard to Sheets" \
-            --body "Adds data_source.py and wiring." \
-            --base main \
-            --head feat/connect-sheets
+          gh pr create --title "Connect dashboard to Sheets" --body "Adds data_source.py and wiring." --base main
